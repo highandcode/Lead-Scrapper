@@ -8,6 +8,7 @@ import {
   ExternalLink, Instagram, Globe, Phone, Star, Brain,
   MessageSquare, Download, Search, Filter, ChevronUp,
   ChevronDown, Loader2, ArrowUpDown, X, SlidersHorizontal, Trash2, MapPin, CalendarRange, Edit3,
+  GitMerge,
 } from "lucide-react";
 // WhatsApp brand SVG (Lucide doesn't have one)
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -22,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import ScoreRing from "@/components/shared/ScoreRing";
+import MergeToGoogleModal from "@/components/leads/MergeToGoogleModal";
 import { cn, getStatusColor, formatNumber, truncate, toWhatsAppUrl, resolveTemplate } from "@/lib/utils";
 import { leadFiltersToParams } from "@/lib/lead-filters";
 import { useUser } from "@/hooks/useUser";
@@ -165,6 +167,7 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Filter changes fire faster than the API answers; only the newest request
@@ -796,6 +799,17 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
                 Clean Up
               </Button>
             )}
+            {!dataSource && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setMergeModalOpen(true)}
+                title="Move leads in chosen categories into Google Leads, skipping ones already there"
+              >
+                <GitMerge className="w-3.5 h-3.5" /> Merge to Google Leads
+              </Button>
+            )}
             <Button variant="outline" size="sm" className="h-9" onClick={exportCSV}>
               <Download className="w-3.5 h-3.5" /> Export CSV
             </Button>
@@ -948,6 +962,15 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
       </div>
 
       <p className="text-xs text-muted-foreground text-right">{data.total} total leads</p>
+
+      {!dataSource && (
+        <MergeToGoogleModal
+          open={mergeModalOpen}
+          onClose={() => setMergeModalOpen(false)}
+          categories={nicheOptions}
+          onMerged={() => fetchLeads(toApiFilters(ui))}
+        />
+      )}
     </div>
   );
 }
