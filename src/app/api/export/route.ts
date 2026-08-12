@@ -2,28 +2,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { leadsToCSV } from "@/services/export/csv";
 import { requireApiAuth } from "@/lib/api-auth";
+import { parseLeadFilters, applyLeadFilters, applyLeadSort } from "@/lib/lead-filters";
 import type { Lead } from "@/types";
+
+/** Safety cap on an unselected export. Surfaced in the export page copy. */
+const EXPORT_LIMIT = 500;
 
 export async function GET(request: NextRequest) {
   const { response } = await requireApiAuth();
   if (response) return response;
   const { searchParams } = new URL(request.url);
   const ids = searchParams.get("ids");
-  const city = searchParams.get("city");
-  const status = searchParams.get("status");
-  const dataSource = searchParams.get("data_source");
+  const filters = parseLeadFilters(searchParams);
 
   try {
     let query = supabaseAdmin.from("leads").select("*");
 
     if (ids) {
+      // Explicit row selection wins over the filter bar.
       query = query.in("id", ids.split(","));
     } else {
-      if (city) query = query.eq("city", city);
-      if (status) query = query.eq("outreach_status", status);
-      if (dataSource) query = query.eq("data_source", dataSource);
-      query = query.order("lead_score", { ascending: false, nullsFirst: false });
-      query = query.limit(500);
+      // Same filters, same semantics as GET /api/leads, so the CSV matches
+      // exactly what the table was showing.
+      query = applyLeadFilters(query, filters);
+      query = applyLeadSort(query, filters);
+      query = query.limit(EXPORT_LIMIT);
     }
 
     const { data: leads, error } = await query;
@@ -33,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
 
     const csv = leadsToCSV((leads as Lead[]) ?? []);
-    const source = dataSource ? `-${dataSource}` : "";
+    const source = filters.data_source ? `-${filters.data_source}` : "";
     const filename = `clinic-leads${source}-${new Date().toISOString().split("T")[0]}.csv`;
 
     return new NextResponse(csv, {

@@ -1,5 +1,6 @@
 import { runApifyActor, APIFY_ACTORS } from "@/lib/apify";
 import { withRetry } from "@/lib/utils";
+import { stableListingUrl } from "@/services/scraping/dedupe";
 import type { JustDialPlace, SearchParams } from "@/types";
 
 interface ApifyJustDialResult {
@@ -53,7 +54,9 @@ export async function scrapeJustDial(
     })
     .slice(0, limit)
     .map((r): JustDialPlace => ({
-      place_id: `jd_${r.url}`,
+      // Strip the search query string — it varies per niche searched and would
+      // otherwise make the same listing look like a new lead every time.
+      place_id: `jd_${stableListingUrl(r.url ?? "")}`,
       clinic_name: r.name ?? "Unknown",
       category: params.niche,
       address: r.address ?? "",

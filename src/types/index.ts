@@ -11,6 +11,8 @@ export interface UserPermissions {
     search: boolean;
     justdial: boolean;
     jdLeads: boolean;
+    googleSearch: boolean;
+    googleLeads: boolean;
     export: boolean;
   };
   actions: {
@@ -27,6 +29,8 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
     search: true,
     justdial: true,
     jdLeads: true,
+    googleSearch: true,
+    googleLeads: true,
     export: true,
   },
   actions: {
@@ -195,6 +199,8 @@ export interface SearchParams {
   minFollowers?: number;
   maxFollowers?: number;
   limit?: number;
+  /** ISO 3166-1 alpha-2, defaults to "in". Constrains results to one country. */
+  countryCode?: string;
 }
 
 export interface ScrapeResult {
@@ -204,7 +210,8 @@ export interface ScrapeResult {
 }
 
 export interface GoogleMapsPlace {
-  place_id: string;
+  /** null when the source omitted an id — see place_id handling in dedupe.ts */
+  place_id: string | null;
   clinic_name: string;
   category: string;
   address: string;
@@ -239,7 +246,16 @@ export interface LeadFilters {
   hasWebsite?: boolean;
   hasInstagram?: boolean;
   hasWhatsApp?: boolean;
+  /**
+   * "has" = a number in either phone or whatsapp_phone; "missing" = both null.
+   * Tri-state rather than a one-way boolean like the flags above, because
+   * "leads I still need a number for" is a view you switch to, not a flag you
+   * turn on — and it is the set the Find Contacts run works from.
+   */
+  phone?: "has" | "missing";
   data_source?: string;
+  dateFrom?: string;
+  dateTo?: string;
   sortBy?: "lead_score" | "created_at" | "rating" | "clinic_name";
   sortOrder?: "asc" | "desc";
   page?: number;

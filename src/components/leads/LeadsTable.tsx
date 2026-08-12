@@ -7,7 +7,7 @@ import Link from "next/link";
 import {
   ExternalLink, Instagram, Globe, Phone, Star, Brain,
   MessageSquare, Download, Search, Filter, ChevronUp,
-  ChevronDown, Loader2, ArrowUpDown, X, SlidersHorizontal, Trash2,
+  ChevronDown, Loader2, ArrowUpDown, X, SlidersHorizontal, Trash2, MapPin, CalendarRange, Edit3,
 } from "lucide-react";
 // WhatsApp brand SVG (Lucide doesn't have one)
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import ScoreRing from "@/components/shared/ScoreRing";
 import { cn, getStatusColor, formatNumber, truncate, toWhatsAppUrl } from "@/lib/utils";
+import { leadFiltersToParams } from "@/lib/lead-filters";
 import toast from "react-hot-toast";
 import type { Lead, LeadFilters, PaginatedLeads, OutreachStatus } from "@/types";
 
@@ -53,21 +54,10 @@ const CITY_OPTIONS = [
   "Noida", "Gurgaon", "Moradabad",
 ];
 
-const NICHE_OPTIONS = [
-  "Dermatologist",
-  "Hair Clinic",
-  "IVF Clinic",
-  "Skin Clinic",
-  "Dental Clinic",
-  "Aesthetic Clinic",
-  "Cosmetic Surgeon",
-  "Salon",
-  "Wellness Center",
-  "Spa",
-  "Orthopedic Clinic",
-  "Eye Clinic",
-  "Physiotherapy Clinic",
-  "Handicraft",
+const PHONE_OPTIONS = [
+  { value: "any",     label: "Any Phone" },
+  { value: "missing", label: "No Phone" },
+  { value: "has",     label: "Has Phone" },
 ];
 
 const DEFAULTS = {
@@ -76,6 +66,9 @@ const DEFAULTS = {
   minScore: "any",
   city: "all",
   niche: "all",
+  phone: "any",
+  dateFrom: "",
+  dateTo: "",
   sortBy: "lead_score" as LeadFilters["sortBy"],
   sortOrder: "desc" as "asc" | "desc",
 };
@@ -87,6 +80,9 @@ function filtersFromParams(params: URLSearchParams): {
   minScore: string;
   city: string;
   niche: string;
+  phone: string;
+  dateFrom: string;
+  dateTo: string;
   sortBy: LeadFilters["sortBy"];
   sortOrder: "asc" | "desc";
   page: number;
@@ -97,6 +93,9 @@ function filtersFromParams(params: URLSearchParams): {
     minScore:  params.get("minScore")  ?? DEFAULTS.minScore,
     city:      params.get("city")      ?? DEFAULTS.city,
     niche:     params.get("niche")     ?? DEFAULTS.niche,
+    phone:     params.get("phone")     ?? DEFAULTS.phone,
+    dateFrom:  params.get("dateFrom")  ?? DEFAULTS.dateFrom,
+    dateTo:    params.get("dateTo")    ?? DEFAULTS.dateTo,
     sortBy:    (params.get("sortBy")   ?? DEFAULTS.sortBy) as LeadFilters["sortBy"],
     sortOrder: (params.get("sortOrder") ?? DEFAULTS.sortOrder) as "asc" | "desc",
     page:      Number(params.get("page") ?? 1),
@@ -111,6 +110,9 @@ function toApiFilters(ui: ReturnType<typeof filtersFromParams>): LeadFilters {
     minScore:        ui.minScore !== "any" ? Number(ui.minScore) : undefined,
     city:            ui.city !== "all" ? ui.city : undefined,
     category:        ui.niche !== "all" ? ui.niche : undefined,
+    phone:           ui.phone !== "any" ? (ui.phone as LeadFilters["phone"]) : undefined,
+    dateFrom:        ui.dateFrom || undefined,
+    dateTo:          ui.dateTo   || undefined,
     sortBy:          ui.sortBy,
     sortOrder:       ui.sortOrder,
     page:            ui.page,
@@ -124,7 +126,18 @@ interface LeadsTableProps {
   allowDelete?: boolean; // show delete buttons
 }
 
+// Detail links must stay under the section a lead was reached from — otherwise
+// clicking into a lead from JD Leads or Google Leads always lands on the
+// generic /leads/[id] route, which makes the sidebar jump to "All Leads" and
+// makes Back/refresh lose the section entirely.
+function basePathFor(dataSource?: string): string {
+  if (dataSource === "justdial") return "/jd-leads";
+  if (dataSource === "google_search") return "/google-leads";
+  return "/leads";
+}
+
 export default function LeadsTable({ initialData, dataSource, allowDelete }: LeadsTableProps) {
+  const basePath = basePathFor(dataSource);
   const router     = useRouter();
   const pathname   = usePathname();
   const rawParams  = useSearchParams();
@@ -136,12 +149,20 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [analyzing,   setAnalyzing]   = useState<Set<string>>(new Set());
   const [loading,     setLoading]     = useState(false);
+  const [findingContacts, setFindingContacts] = useState(false);
+  const [cleaning,    setCleaning]    = useState(false);
+  const [renaming,    setRenaming]    = useState(false);
+  const [nicheOptions, setNicheOptions] = useState<string[]>([]);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Filter changes fire faster than the API answers; only the newest request
+  // may touch state, or a slow early response overwrites a fresh later one.
+  const requestSeq = useRef(0);
 
   // ── Fetch ──────────────────────────────────────────────────
   // silent=true skips the loading skeleton (background refresh when we already have data)
   const fetchLeads = useCallback(async (apiFilters: LeadFilters, silent = false) => {
+    const seq = ++requestSeq.current;
     if (!silent) setLoading(true);
     try {
       const p = new URLSearchParams();
@@ -150,19 +171,43 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
       if (apiFilters.category)        p.set("category",        apiFilters.category);
       if (apiFilters.outreach_status) p.set("outreach_status", apiFilters.outreach_status);
       if (apiFilters.minScore != null)p.set("minScore",        String(apiFilters.minScore));
+      if (apiFilters.phone)           p.set("phone",           apiFilters.phone);
+      if (apiFilters.dateFrom)        p.set("dateFrom",        apiFilters.dateFrom);
+      if (apiFilters.dateTo)          p.set("dateTo",          apiFilters.dateTo);
       if (apiFilters.sortBy)          p.set("sortBy",          apiFilters.sortBy);
       if (apiFilters.sortOrder)       p.set("sortOrder",       apiFilters.sortOrder);
       if (dataSource)                 p.set("data_source",     dataSource);
       p.set("page",     String(apiFilters.page     ?? 1));
       p.set("pageSize", String(apiFilters.pageSize ?? 20));
 
-      const res  = await fetch(`/api/leads?${p}`);
-      const json = await res.json();
+      // Without a deadline a stalled connection leaves the skeleton spinning
+      // forever with nothing to tell the user.
+      const res  = await fetch(`/api/leads?${p}`, { signal: AbortSignal.timeout(20_000) });
+      const json = await res.json().catch(() => null);
+
+      // An error payload is still valid JSON. Assigning it to `data` would put
+      // `data.leads === undefined` into render and crash the whole page, which
+      // is why a failed load used to look like the app breaking rather than a
+      // request that failed.
+      if (!res.ok || !Array.isArray(json?.leads)) {
+        throw new Error(json?.error ?? `Server returned ${res.status}`);
+      }
+
+      if (seq !== requestSeq.current) return;
       setData(json);
-    } catch {
-      if (!silent) toast.error("Failed to load leads");
+    } catch (error) {
+      if (seq !== requestSeq.current) return;
+      // Report even on a silent refresh: the rows on screen are stale, and
+      // saying why beats letting them look current.
+      const reason =
+        error instanceof DOMException && error.name === "TimeoutError"
+          ? "the request timed out"
+          : error instanceof Error && error.message
+            ? error.message
+            : "unknown error";
+      toast.error(`Couldn't load leads — ${reason}`);
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent && seq === requestSeq.current) setLoading(false);
     }
   }, [dataSource]);
 
@@ -176,6 +221,17 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetch the list of niches actually present in the data, so the filter
+  // always reflects real values instead of a hardcoded, stale list.
+  useEffect(() => {
+    const p = new URLSearchParams({ categories: "true" });
+    if (dataSource) p.set("data_source", dataSource);
+    fetch(`/api/leads?${p}`)
+      .then(res => res.json())
+      .then(json => setNicheOptions(json.categories ?? []))
+      .catch(() => {});
+  }, [dataSource]);
+
   // ── URL sync helper ────────────────────────────────────────
   function pushUrl(next: ReturnType<typeof filtersFromParams>) {
     const p = new URLSearchParams();
@@ -184,6 +240,8 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
     if (next.minScore && next.minScore !== DEFAULTS.minScore)  p.set("minScore",  next.minScore);
     if (next.city     && next.city     !== DEFAULTS.city)      p.set("city",      next.city);
     if (next.niche    && next.niche    !== DEFAULTS.niche)     p.set("niche",     next.niche);
+    if (next.dateFrom && next.dateFrom !== DEFAULTS.dateFrom)  p.set("dateFrom",  next.dateFrom);
+    if (next.dateTo   && next.dateTo   !== DEFAULTS.dateTo)    p.set("dateTo",    next.dateTo);
     if (next.sortBy   && next.sortBy   !== DEFAULTS.sortBy)    p.set("sortBy",    next.sortBy);
     if (next.sortOrder && next.sortOrder !== DEFAULTS.sortOrder) p.set("sortOrder", next.sortOrder);
     if (next.page > 1)                                          p.set("page",      String(next.page));
@@ -239,6 +297,9 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
     ui.minScore  !== DEFAULTS.minScore,
     ui.city      !== DEFAULTS.city,
     ui.niche     !== DEFAULTS.niche,
+    ui.phone     !== DEFAULTS.phone,
+    ui.dateFrom  !== DEFAULTS.dateFrom,
+    ui.dateTo    !== DEFAULTS.dateTo,
   ].filter(Boolean).length;
 
   // ── Active chips ───────────────────────────────────────────
@@ -247,6 +308,9 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
   if (ui.status   !== DEFAULTS.status)   chips.push({ label: STATUS_OPTIONS.find(s => s.value === ui.status)?.label ?? ui.status, clear: () => applyFilter({ status: "all" }) });
   if (ui.minScore !== DEFAULTS.minScore) chips.push({ label: SCORE_OPTIONS.find(s => s.value === ui.minScore)?.label ?? ui.minScore, clear: () => applyFilter({ minScore: "any" }) });
   if (ui.city     !== DEFAULTS.city)     chips.push({ label: ui.city,                            clear: () => applyFilter({ city: "all" }) });
+  if (ui.niche    !== DEFAULTS.niche)    chips.push({ label: ui.niche,                            clear: () => applyFilter({ niche: "all" }) });
+  if (ui.phone    !== DEFAULTS.phone)    chips.push({ label: PHONE_OPTIONS.find(p => p.value === ui.phone)?.label ?? ui.phone, clear: () => applyFilter({ phone: "any" }) });
+  if (ui.dateFrom || ui.dateTo)          chips.push({ label: `${ui.dateFrom || "…"} → ${ui.dateTo || "…"}`, clear: () => applyFilter({ dateFrom: "", dateTo: "" }) });
 
   // ── Selection helpers ──────────────────────────────────────
   function toggleSelect(id: string) {
@@ -312,9 +376,182 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
     } catch { toast.dismiss(t); toast.error("Bulk delete failed"); }
   }
 
+  /** The exact set the table is showing — same params the CSV export sends. */
+  function currentFilterParams() {
+    const p = leadFiltersToParams(toApiFilters(ui));
+    if (dataSource) p.set("data_source", dataSource);
+    return p;
+  }
+
+  // ── Find contacts ──────────────────────────────────────────
+  // Runs over the selected rows, or else over everything the current filters
+  // match — not just the 20 rows on this page, which is why the summary
+  // reports how many were left for a follow-up run.
+  async function findContacts() {
+    const ids = selectedIds.size > 0 ? Array.from(selectedIds) : undefined;
+    const scope = ids ? `${ids.length} selected leads` : "the filtered leads";
+    const t = toast.loading(`Finding contacts for ${scope}… this can take a few minutes.`);
+
+    setFindingContacts(true);
+    try {
+      const res = await fetch("/api/leads/find-contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids,
+          filters: ids ? undefined : currentFilterParams().toString(),
+          niche: ui.niche !== "all" ? ui.niche : undefined,
+          useSocialFallback: true,
+        }),
+      });
+      const json = await res.json();
+      toast.dismiss(t);
+      if (!res.ok) throw new Error(json?.error ?? `Server returned ${res.status}`);
+
+      const s = json.summary;
+      if (s.attempted === 0) {
+        toast.success(json.message ?? "Nothing to do — every lead already has a phone.");
+      } else {
+        toast.success(
+          `${s.phonesFound} phone number(s) found across ${s.attempted} leads.` +
+            (s.notCompanies ? ` ${s.notCompanies} were not businesses.` : "") +
+            (s.remaining ? ` ${s.remaining} left — run again to continue.` : "")
+        );
+      }
+      setSelectedIds(new Set());
+      fetchLeads(toApiFilters(ui));
+    } catch (error) {
+      toast.dismiss(t);
+      toast.error(error instanceof Error ? error.message : "Find contacts failed");
+    } finally {
+      setFindingContacts(false);
+    }
+  }
+
+  // ── Remove non-business results ────────────────────────────
+  // Scans first and asks before deleting: the verdict comes from a model
+  // reading the site, and a wrong "not a business" here deletes a real lead.
+  async function cleanUpNonCompanies() {
+    const ids = selectedIds.size > 0 ? Array.from(selectedIds) : undefined;
+    const t = toast.loading("Checking which results are actual businesses…");
+
+    setCleaning(true);
+    try {
+      const res = await fetch("/api/leads/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids,
+          filters: ids ? undefined : currentFilterParams().toString(),
+          niche: ui.niche !== "all" ? ui.niche : undefined,
+        }),
+      });
+      const json = await res.json();
+      toast.dismiss(t);
+      if (!res.ok) throw new Error(json?.error ?? `Server returned ${res.status}`);
+
+      const rejected: { id: string; name: string; verdict: { reason: string } }[] = json.rejected ?? [];
+      if (rejected.length === 0) {
+        toast.success(`Checked ${json.summary.scanned} leads — all of them look like real businesses.`);
+        return;
+      }
+
+      const preview = rejected.slice(0, 8).map(r => `• ${r.name} — ${r.verdict.reason}`).join("\n");
+      const confirmed = window.confirm(
+        `${rejected.length} of ${json.summary.scanned} leads are not businesses:\n\n${preview}` +
+          (rejected.length > 8 ? `\n…and ${rejected.length - 8} more` : "") +
+          `\n\nDelete them?`
+      );
+      if (!confirmed) return;
+
+      const del = await fetch("/api/leads/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deleteIds: rejected.map(r => r.id) }),
+      });
+      const delJson = await del.json();
+      if (!del.ok) throw new Error(delJson?.error ?? "Delete failed");
+
+      toast.success(`${delJson.deleted} non-business leads removed`);
+      setSelectedIds(new Set());
+      fetchLeads(toApiFilters(ui));
+    } catch (error) {
+      toast.dismiss(t);
+      toast.error(error instanceof Error ? error.message : "Cleanup failed");
+    } finally {
+      setCleaning(false);
+    }
+  }
+
+  // ── Fix listicle-style names ───────────────────────────────
+  // Scans first: the classifier only recovers a company name for domains it
+  // judged to actually be a business, but showing what will change before
+  // writing it beats silently overwriting a name that might be fine.
+  async function renameListicles() {
+    const ids = selectedIds.size > 0 ? Array.from(selectedIds) : undefined;
+    const t = toast.loading("Checking which names came from a listicle title…");
+
+    setRenaming(true);
+    try {
+      const res = await fetch("/api/leads/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids,
+          filters: ids ? undefined : currentFilterParams().toString(),
+          niche: ui.niche !== "all" ? ui.niche : undefined,
+        }),
+      });
+      const json = await res.json();
+      toast.dismiss(t);
+      if (!res.ok) throw new Error(json?.error ?? `Server returned ${res.status}`);
+
+      const renameable: { id: string; name: string; verdict: { companyName: string | null } }[] =
+        json.renameable ?? [];
+      if (renameable.length === 0) {
+        toast.success(`Checked ${json.summary.scanned} leads — no listicle-style names found.`);
+        return;
+      }
+
+      const preview = renameable.slice(0, 8).map(r => `• "${r.name}" → "${r.verdict.companyName}"`).join("\n");
+      const confirmed = window.confirm(
+        `${renameable.length} of ${json.summary.scanned} leads are named after the article that ranked them, not the business:\n\n${preview}` +
+          (renameable.length > 8 ? `\n…and ${renameable.length - 8} more` : "") +
+          `\n\nRename them to their real company names?`
+      );
+      if (!confirmed) return;
+
+      const apply = await fetch("/api/leads/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          renames: renameable.map(r => ({ id: r.id, name: r.verdict.companyName as string })),
+        }),
+      });
+      const applyJson = await apply.json();
+      if (!apply.ok) throw new Error(applyJson?.error ?? "Rename failed");
+
+      toast.success(`${applyJson.renamed} lead(s) renamed`);
+      setSelectedIds(new Set());
+      fetchLeads(toApiFilters(ui));
+    } catch (error) {
+      toast.dismiss(t);
+      toast.error(error instanceof Error ? error.message : "Rename failed");
+    } finally {
+      setRenaming(false);
+    }
+  }
+
   function exportCSV() {
-    const ids = selectedIds.size > 0 ? Array.from(selectedIds).join(",") : undefined;
-    window.open(`/api/export${ids ? `?ids=${ids}` : ""}`, "_blank");
+    // Explicitly selected rows win; otherwise export exactly what the current
+    // filters are showing rather than the whole table.
+    if (selectedIds.size > 0) {
+      const ids = Array.from(selectedIds).join(",");
+      window.open(`/api/export?ids=${ids}`, "_blank");
+      return;
+    }
+
+    window.open(`/api/export?${currentFilterParams()}`, "_blank");
   }
 
   function SortIcon({ col }: { col: LeadFilters["sortBy"] }) {
@@ -372,18 +609,24 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
           </SelectContent>
         </Select>
 
-        {/* City */}
-        <Select value={ui.city} onValueChange={v => applyFilter({ city: v })}>
-          <SelectTrigger className={cn("w-36 h-9", ui.city !== DEFAULTS.city && "border-primary/50 text-primary")}>
-            <SelectValue placeholder="All Cities" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Cities</SelectItem>
-            {CITY_OPTIONS.map(c => (
-              <SelectItem key={c} value={c}>{c}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* City — free-text + dropdown */}
+        <div className="relative">
+          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            list="city-options"
+            placeholder="Any city"
+            value={ui.city === "all" ? "" : ui.city}
+            onChange={e => applyFilter({ city: e.target.value.trim() || "all" })}
+            className={cn(
+              "h-9 w-36 rounded-md border bg-background pl-8 pr-3 text-sm outline-none focus:ring-1 focus:ring-primary/50",
+              ui.city !== DEFAULTS.city ? "border-primary/50 text-primary" : "border-input text-foreground"
+            )}
+          />
+          <datalist id="city-options">
+            {CITY_OPTIONS.map(c => <option key={c} value={c} />)}
+          </datalist>
+        </div>
 
         {/* Niche */}
         <Select value={ui.niche} onValueChange={v => applyFilter({ niche: v })}>
@@ -392,8 +635,47 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Niches</SelectItem>
-            {NICHE_OPTIONS.map(n => (
+            {nicheOptions.map(n => (
               <SelectItem key={n} value={n}>{n}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Date range */}
+        <div className="flex items-center gap-1">
+          <CalendarRange className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <input
+            type="date"
+            value={ui.dateFrom}
+            max={ui.dateTo || undefined}
+            onChange={e => applyFilter({ dateFrom: e.target.value })}
+            className={cn(
+              "h-9 w-[9.5rem] rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-primary/50",
+              ui.dateFrom !== DEFAULTS.dateFrom ? "border-primary/50 text-primary" : "border-input text-foreground"
+            )}
+          />
+          <span className="text-muted-foreground text-xs">–</span>
+          <input
+            type="date"
+            value={ui.dateTo}
+            min={ui.dateFrom || undefined}
+            onChange={e => applyFilter({ dateTo: e.target.value })}
+            className={cn(
+              "h-9 w-[9.5rem] rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-primary/50",
+              ui.dateTo !== DEFAULTS.dateTo ? "border-primary/50 text-primary" : "border-input text-foreground"
+            )}
+          />
+        </div>
+
+        {/* Phone */}
+        <Select value={ui.phone} onValueChange={v => applyFilter({ phone: v })}>
+          <SelectTrigger className={cn("w-36 h-9", ui.phone !== DEFAULTS.phone && "border-primary/50 text-primary")}>
+            <Phone className="w-3.5 h-3.5 mr-1.5 text-muted-foreground shrink-0" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PHONE_OPTIONS.map(p => (
+              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -421,6 +703,12 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
               <Button variant="outline" size="sm" onClick={analyzeSelected}><Brain className="w-3.5 h-3.5" /> Analyze</Button>
+              <Button variant="outline" size="sm" onClick={findContacts} disabled={findingContacts}>
+                {findingContacts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />} Find Contacts
+              </Button>
+              <Button variant="outline" size="sm" onClick={renameListicles} disabled={renaming}>
+                {renaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Edit3 className="w-3.5 h-3.5" />} Fix Names
+              </Button>
               <Button variant="outline" size="sm" onClick={exportCSV}><Download className="w-3.5 h-3.5" /> Export</Button>
               {allowDelete && (
                 <Button variant="outline" size="sm" onClick={deleteSelected} className="text-red-400 border-red-500/30 hover:bg-red-500/10">
@@ -432,9 +720,46 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
         </AnimatePresence>
 
         {selectedIds.size === 0 && (
-          <Button variant="outline" size="sm" className="h-9" onClick={exportCSV}>
-            <Download className="w-3.5 h-3.5" /> Export CSV
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={findContacts}
+              disabled={findingContacts}
+              title="Crawl each lead's website (then its Instagram) for a phone number and email"
+            >
+              {findingContacts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}
+              Find Contacts
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={renameListicles}
+              disabled={renaming}
+              title='Rename leads still named after a listicle ("Top 10 PR Firms in Delhi…") to the actual company name'
+            >
+              {renaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Edit3 className="w-3.5 h-3.5" />}
+              Fix Names
+            </Button>
+            {allowDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={cleanUpNonCompanies}
+                disabled={cleaning}
+                title="Find results that are directories, social pages or publishers rather than businesses, and remove them"
+              >
+                {cleaning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                Clean Up
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-9" onClick={exportCSV}>
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </Button>
+          </>
         )}
       </div>
 
@@ -529,6 +854,7 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
                   <LeadRow
                     key={lead.id}
                     lead={lead}
+                    basePath={basePath}
                     selected={selectedIds.has(lead.id)}
                     onSelect={() => toggleSelect(lead.id)}
                     onAnalyze={() => analyzeLead(lead.id)}
@@ -582,13 +908,13 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
 // ── Row ────────────────────────────────────────────────────────────────────────
 
 interface LeadRowProps {
-  lead: Lead; selected: boolean;
+  lead: Lead; basePath: string; selected: boolean;
   onSelect: () => void; onAnalyze: () => void;
   analyzing: boolean; onStatusChange: (s: OutreachStatus) => void;
   allowDelete?: boolean; onDelete?: () => void;
 }
 
-function LeadRow({ lead, selected, onSelect, onAnalyze, analyzing, onStatusChange, allowDelete, onDelete }: LeadRowProps) {
+function LeadRow({ lead, basePath, selected, onSelect, onAnalyze, analyzing, onStatusChange, allowDelete, onDelete }: LeadRowProps) {
   return (
     <motion.tr
       initial={{ opacity: 0 }}
@@ -601,7 +927,7 @@ function LeadRow({ lead, selected, onSelect, onAnalyze, analyzing, onStatusChang
       </td>
 
       <td className="px-4 py-3.5">
-        <Link href={`/leads/${lead.id}`} className="block">
+        <Link href={`${basePath}/${lead.id}`} className="block">
           <p className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-1">{lead.clinic_name}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             {lead.category && <span className="text-[11px] text-muted-foreground">{lead.category}</span>}
@@ -688,7 +1014,7 @@ function LeadRow({ lead, selected, onSelect, onAnalyze, analyzing, onStatusChang
 
       <td className="px-4 py-3.5">
         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Link href={`/leads/${lead.id}`}>
+          <Link href={`${basePath}/${lead.id}`}>
             <Button variant="ghost" size="icon-sm" title="View details"><ExternalLink className="w-3.5 h-3.5" /></Button>
           </Link>
           {lead.lead_score == null && (
@@ -697,7 +1023,7 @@ function LeadRow({ lead, selected, onSelect, onAnalyze, analyzing, onStatusChang
             </Button>
           )}
           {lead.outreach_instagram_dm && (
-            <Link href={`/leads/${lead.id}?tab=outreach`}>
+            <Link href={`${basePath}/${lead.id}?tab=outreach`}>
               <Button variant="ghost" size="icon-sm" title="View outreach"><MessageSquare className="w-3.5 h-3.5" /></Button>
             </Link>
           )}

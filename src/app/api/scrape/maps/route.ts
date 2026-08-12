@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { scrapeGoogleMaps } from "@/services/scraping/googleMaps";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireApiAuth } from "@/lib/api-auth";
+import { filterNewLeads } from "@/services/scraping/dedupe";
 import type { SearchParams } from "@/types";
 
 export async function POST(request: NextRequest) {
@@ -61,13 +62,26 @@ export async function POST(request: NextRequest) {
       outreach_status: "new",
     }));
 
-    const { data: inserted, error } = await supabaseAdmin
-      .from("leads")
-      .upsert(leadsToInsert, { onConflict: "place_id", ignoreDuplicates: true })
-      .select("id, clinic_name, city, rating");
+    // Keep only leads we don't already have — place_id alone misses the same
+    // clinic arriving from another source or under another niche.
+    const { fresh, existingCount, inBatchCount } = await filterNewLeads(
+      leadsToInsert,
+      city
+    );
+    const skipped = existingCount + inBatchCount;
 
-    if (error) {
-      console.error("DB upsert error:", error);
+    let inserted: { id: string; clinic_name: string; city: string; rating: number }[] = [];
+
+    if (fresh.length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from("leads")
+        .upsert(fresh, { onConflict: "place_id", ignoreDuplicates: true })
+        .select("id, clinic_name, city, rating");
+
+      if (error) {
+        console.error("DB upsert error:", error);
+      }
+      inserted = data ?? [];
     }
 
     // Update session
@@ -76,16 +90,21 @@ export async function POST(request: NextRequest) {
         .from("search_sessions")
         .update({
           status: "completed",
-          leads_found: inserted?.length ?? 0,
+          leads_found: inserted.length,
           completed_at: new Date().toISOString(),
         })
         .eq("id", session.id);
     }
 
     return NextResponse.json({
-      leads: inserted ?? [],
-      count: inserted?.length ?? 0,
-      message: `Found ${inserted?.length ?? 0} clinics for "${niche} ${city}"`,
+      leads: inserted,
+      count: inserted.length,
+      scanned: places.length,
+      duplicatesSkipped: skipped,
+      message:
+        `Found ${places.length} clinics for "${niche} ${city}" — ` +
+        `${inserted.length} new` +
+        (skipped > 0 ? `, ${skipped} already in your list` : ""),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Scraping failed";

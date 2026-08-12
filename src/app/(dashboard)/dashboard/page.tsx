@@ -18,15 +18,21 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const [statsRes, leadsRes] = await Promise.all([
-        fetch("/api/leads?stats=true"),
-        fetch("/api/leads?sortBy=lead_score&sortOrder=desc&pageSize=5&minScore=60"),
-      ]);
-      const statsData = await statsRes.json();
-      const leadsData = await leadsRes.json();
-      setStats(statsData);
-      setHotLeads(leadsData.leads ?? []);
-      setStatsLoading(false);
+      try {
+        const [statsRes, leadsRes] = await Promise.all([
+          fetch("/api/leads?stats=true"),
+          fetch("/api/leads?sortBy=lead_score&sortOrder=desc&pageSize=5&minScore=60"),
+        ]);
+        const statsData = await statsRes.json().catch(() => null);
+        const leadsData = await leadsRes.json().catch(() => null);
+
+        if (statsRes.ok && statsData) setStats(statsData);
+        if (leadsRes.ok && Array.isArray(leadsData?.leads)) setHotLeads(leadsData.leads);
+      } finally {
+        // Whatever happened, stop the skeleton — leaving it spinning reads as a
+        // hung page rather than a request that failed.
+        setStatsLoading(false);
+      }
     }
     load();
   }, []);

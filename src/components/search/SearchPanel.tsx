@@ -54,7 +54,12 @@ export default function SearchPanel({ onSearchComplete }: SearchPanelProps) {
   const [minRating, setMinRating] = useState("");
   const [loading, setLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [lastResult, setLastResult] = useState<{ count: number; query: string } | null>(null);
+  const [lastResult, setLastResult] = useState<{
+    count: number;
+    scanned: number;
+    duplicatesSkipped: number;
+    query: string;
+  } | null>(null);
 
   const effectiveCity = customCity || city;
   const effectiveNiche = customNiche || niche;
@@ -93,7 +98,12 @@ export default function SearchPanel({ onSearchComplete }: SearchPanelProps) {
 
       toast.dismiss(searchToast);
       toast.success(data.message ?? `Found ${data.count} clinics!`);
-      setLastResult({ count: data.count, query });
+      setLastResult({
+        count: data.count,
+        scanned: data.scanned ?? data.count,
+        duplicatesSkipped: data.duplicatesSkipped ?? 0,
+        query,
+      });
       onSearchComplete?.(data.count);
     } catch (error) {
       toast.dismiss(searchToast);
@@ -279,9 +289,19 @@ export default function SearchPanel({ onSearchComplete }: SearchPanelProps) {
             >
               <div>
                 <p className="text-sm font-semibold text-emerald-400">
-                  {lastResult.count} leads found
+                  {lastResult.count} new {lastResult.count === 1 ? "lead" : "leads"} added
                 </p>
-                <p className="text-xs text-muted-foreground">for "{lastResult.query}"</p>
+                <p className="text-xs text-muted-foreground">
+                  for "{lastResult.query}"
+                  {lastResult.scanned > 0 && (
+                    <>
+                      {" · "}scanned {lastResult.scanned}
+                      {/* Without this, a repeat search looks like the scraper failed. */}
+                      {lastResult.duplicatesSkipped > 0 &&
+                        `, ${lastResult.duplicatesSkipped} already in your list`}
+                    </>
+                  )}
+                </p>
               </div>
               <a href="/leads" className="text-xs text-blue-400 hover:underline">
                 View leads →

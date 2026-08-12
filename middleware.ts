@@ -33,13 +33,14 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // API routes are excluded from the matcher below; they authenticate
+  // themselves via requireApiAuth/requireApiRole.
   const isProtectedRoute =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/leads") ||
     pathname.startsWith("/search") ||
     pathname.startsWith("/export") ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/api/private");
+    pathname.startsWith("/admin");
 
   const isAuthRoute =
     pathname === "/login" ||
@@ -76,6 +77,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

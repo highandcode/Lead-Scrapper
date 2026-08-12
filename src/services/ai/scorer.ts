@@ -31,12 +31,13 @@ function buildHeuristicScore(input: ScoringInput): ScoreBreakdown {
     conversionScore -= 30;
     automationScore -= 20;
   } else if (wa?.noWebsite) {
-    // No standalone website — penalize for SEO invisibility, but credit what they DO have via Instagram
-    websiteScore = 20; // Always a gap vs having an independent site
-    if (!hasIgBooking) { conversionScore -= 15; automationScore -= 15; } // Missing booking capability entirely
-    if (!hasIgLink) { conversionScore -= 10; } // No web presence at all from bio
-    // Large established chains with no website still have real patients — less urgent need
-    if (igFollowers > 50000) websiteScore += 10;
+    // No standalone website — penalize for SEO invisibility
+    websiteScore = 20;
+    if (input.instagramHasLinkInBio) websiteScore += 15; // Bio link is partial credit
+    if (input.instagramHasBookingLink) { websiteScore += 10; conversionScore += 10; } // Booking link compensates further
+    else { conversionScore -= 15; automationScore -= 15; }
+    if (!input.instagramHasLinkInBio) conversionScore -= 10;
+    if (igFollowers > 50000) websiteScore += 5; // Large established chain
   } else if (wa) {
     if (!wa.hasLandingPage) websiteScore -= 20;
     if (!wa.hasLeadForm) { websiteScore -= 15; conversionScore -= 20; }
@@ -142,8 +143,10 @@ Return only JSON with: score (1-100), reasoning (2-3 sentences), quickWins (arra
   const websiteStatus = input.websiteAnalysis?.domainParked
     ? "Domain expired/parked — no active website"
     : input.website
-    ? "Has website"
-    : "No website";
+    ? "Has standalone website"
+    : lead.instagram_external_url
+    ? `No standalone website, but has bio link: ${lead.instagram_external_url}${lead.instagram_has_booking_link ? " (booking page)" : " (not a booking page)"}`
+    : "No website and no bio link — completely invisible online";
 
   const enrichment = lead.instagram_enrichment;
   const igEngagement = enrichment?.realEngagementRate

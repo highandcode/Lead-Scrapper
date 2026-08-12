@@ -1,15 +1,46 @@
 {
   "functions": {
-    "src/app/api/scrape/maps/route.ts":          { "maxDuration": 300 },
-    "src/app/api/scrape/justdial/route.ts":      { "maxDuration": 300 },
-    "src/app/api/analyze/route.ts":              { "maxDuration": 300 },
-    "src/app/api/enrich/instagram/route.ts":     { "maxDuration": 120 },
-    "src/app/api/enrich/whatsapp/route.ts":      { "maxDuration": 60  },
-    "src/app/api/outreach/route.ts":             { "maxDuration": 60  },
-    "src/app/api/export/route.ts":               { "maxDuration": 30  },
-    "src/app/api/leads/route.ts":                { "maxDuration": 30  },
-    "src/app/api/leads/[id]/route.ts":           { "maxDuration": 30  },
-    "src/app/api/admin/users/route.ts":          { "maxDuration": 30  },
-    "src/app/api/admin/users/[id]/route.ts":     { "maxDuration": 30  }
+    "src/app/api/scrape/maps/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/scrape/justdial/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/analyze/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/enrich/instagram/route.ts": {
+      "maxDuration": 120
+    },
+    "src/app/api/enrich/whatsapp/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/outreach/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/export/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/leads/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/leads/[id]/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/admin/users/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/admin/users/[id]/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/scrape/google/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/leads/find-contacts/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/leads/classify/route.ts": {
+      "maxDuration": 300
+    }
   }
 }

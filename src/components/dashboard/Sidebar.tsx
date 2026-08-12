@@ -14,6 +14,8 @@ import {
   UserCog,
   BookOpen,
   ListFilter,
+  Globe,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import UserMenu from "./UserMenu";
@@ -27,6 +29,8 @@ const navItems: { href: string; icon: React.ElementType; label: string; permKey:
   { href: "/justdial",  icon: BookOpen,         label: "Search JustDial",permKey: "justdial"  },
   { href: "/leads",     icon: Users,            label: "All Leads",      permKey: "leads"     },
   { href: "/jd-leads",  icon: ListFilter,       label: "JustDial Leads", permKey: "jdLeads"   },
+  { href: "/google-search", icon: Globe,        label: "Google Search",  permKey: "googleSearch" },
+  { href: "/google-leads",  icon: Sparkles,     label: "Google Leads",   permKey: "googleLeads"  },
 ];
 
 const bottomItems: { href: string; icon: React.ElementType; label: string; permKey: keyof UserPermissions["pages"] | null }[] = [

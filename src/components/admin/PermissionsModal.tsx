@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Shield, LayoutDashboard, Users, Search,
   BookOpen, ListFilter, Download, Brain, Trash2, PenLine, Loader2, Check,
+  Globe, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -193,6 +194,16 @@ export default function PermissionsModal({ user, onClose, onUpdated }: Permissio
                   icon={ListFilter} label="JustDial Leads" description="Dedicated JustDial leads list"
                   iconClass="bg-indigo-500/10" enabled={isAdmin || perms.pages.jdLeads}
                   onChange={v => setPage("jdLeads", v)} disabled={isAdmin}
+                />
+                <PermRow
+                  icon={Globe} label="Google Search" description="Scrape leads directly from Google"
+                  iconClass="bg-blue-500/10" enabled={isAdmin || perms.pages.googleSearch}
+                  onChange={v => setPage("googleSearch", v)} disabled={isAdmin}
+                />
+                <PermRow
+                  icon={Sparkles} label="Google Leads" description="Dedicated Google leads list"
+                  iconClass="bg-cyan-500/10" enabled={isAdmin || perms.pages.googleLeads}
+                  onChange={v => setPage("googleLeads", v)} disabled={isAdmin}
                 />
                 <PermRow
                   icon={Download} label="Export" description="Download leads as CSV"

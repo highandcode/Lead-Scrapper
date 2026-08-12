@@ -3,7 +3,7 @@ import { extractEmailFromBio, scrapeInstagramProfile } from "./instagram";
 
 // ─── Phone normalisation ─────────────────────────────────────────────────────
 
-function normalisePhone(digits: string): string | null {
+export function normalisePhone(digits: string): string | null {
   if (digits.length === 12 && digits.startsWith("91") && /^91[6-9]/.test(digits)) return digits;
   if (digits.length === 11 && digits.startsWith("091")) return `91${digits.slice(1)}`;
   if (digits.length === 10 && /^[6-9]/.test(digits)) return `91${digits}`;
@@ -13,7 +13,7 @@ function normalisePhone(digits: string): string | null {
 // ─── Visible-text extraction ─────────────────────────────────────────────────
 // Strips scripts, styles, and tags so we can scan the rendered copy.
 
-function extractVisibleText(html: string): string {
+export function extractVisibleText(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -30,7 +30,7 @@ function extractVisibleText(html: string): string {
 // Strips separators (spaces, dashes, dots) then finds digit runs — handles
 // "+ 91 9667828884", "96-678-28884", "📞9667828884", etc.
 
-function extractPhoneFromText(text: string): string | null {
+export function extractPhoneFromText(text: string): string | null {
   const cleaned = text.replace(/[-.\s]/g, "");
   const runs = cleaned.match(/\d+/g) ?? [];
   for (const run of runs) {
@@ -43,7 +43,7 @@ function extractPhoneFromText(text: string): string | null {
 // ─── Email extraction ────────────────────────────────────────────────────────
 
 // From HTML: prefer mailto: links, then any visible email address
-function extractEmailFromHtml(html: string): string | null {
+export function extractEmailFromHtml(html: string): string | null {
   const mailtoMatch = html.match(
     /href=["']mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})["']/i,
   );
@@ -52,7 +52,7 @@ function extractEmailFromHtml(html: string): string | null {
 }
 
 // From visible text: broad regex catches any email (gmail, clinic domain, etc.)
-function extractEmailFromText(text: string): string | null {
+export function extractEmailFromText(text: string): string | null {
   const match = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return match ? match[0].toLowerCase() : null;
 }
@@ -65,7 +65,7 @@ const WA_HREF_PATTERNS = [
   /api\.whatsapp\.com\/send[?&]phone=(\d{10,13})/i,
 ];
 
-function extractWhatsAppFromHtml(html: string): string | null {
+export function extractWhatsAppFromHtml(html: string): string | null {
   for (const pattern of WA_HREF_PATTERNS) {
     const match = html.match(pattern);
     if (match?.[1]) {

@@ -21,9 +21,12 @@ function buildContext(lead: Partial<Lead>): string {
   // ── Website status ───────────────────────────────────────────────────────
   const wa = lead.website_analysis;
   if (wa?.noWebsite) {
-    parts.push(`Website: NONE — completely invisible to Google searches`);
     if (lead.instagram_external_url) {
-      parts.push(`Bio Link (only web presence): ${lead.instagram_external_url}${lead.instagram_has_booking_link ? " (booking page)" : " (not a booking page)"}`);
+      // They have a bio link — this IS a web presence, just not a standalone site
+      parts.push(`Website: No standalone website found via Google`);
+      parts.push(`Bio Link (their only web presence): ${lead.instagram_external_url}${lead.instagram_has_booking_link ? " — IS a booking page ✓" : " — NOT a booking/enquiry page"}`);
+    } else {
+      parts.push(`Website: NONE — completely invisible to Google searches, no bio link either`);
     }
   } else if (wa?.directoryListing) {
     parts.push(`Website: Directory listing only (Practo/JustDial/Apollo) — no independent web presence`);
@@ -37,6 +40,12 @@ function buildContext(lead: Partial<Lead>): string {
   } else if (lead.website) {
     parts.push(`Website: ${lead.website}`);
     if (lead.website_title) parts.push(`Website Title: "${lead.website_title}"`);
+  } else if (lead.instagram_external_url) {
+    // No website found anywhere, but they have a bio link — acknowledge it
+    parts.push(`Website: None found via Google`);
+    parts.push(`Bio Link (only web presence): ${lead.instagram_external_url}${lead.instagram_has_booking_link ? " — IS a booking page ✓" : " — not a booking/enquiry page"}`);
+  } else {
+    parts.push(`Website: NONE — completely invisible to Google searches, no bio link either`);
   }
 
   // ── Website quality signals ──────────────────────────────────────────────
@@ -213,7 +222,7 @@ function generateFallbackMessages(lead: Partial<Lead>): OutreachMessages {
   const name = lead.clinic_name ?? "Doctor";
   const city = lead.city ?? "";
   const wa = lead.website_analysis;
-  const noWebsite = wa?.noWebsite || (!lead.website);
+  const noWebsite = wa?.noWebsite || (!lead.website && !lead.instagram_external_url);
   const noBooking = !lead.instagram_has_booking_link;
   const followers = lead.instagram_followers ?? 0;
 

@@ -171,31 +171,32 @@ export default function AnalysisPanel({ lead }: AnalysisPanelProps) {
               </div>
             ) : wa.noWebsite ? (
               <div className="space-y-3">
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/25">
-                  <Globe2 className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-red-300">No Website Found</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      This clinic has no website — they're invisible to online searches. Prime opportunity to pitch a full web presence.
-                    </p>
-                  </div>
-                </div>
-                {lead.instagram_external_url && (
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/25">
-                    <LinkIcon className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                {lead.instagram_external_url ? (
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/25">
+                    <LinkIcon className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-purple-300">Link Found in Instagram Bio</p>
+                      <p className="text-sm font-medium text-amber-300">No Standalone Website</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        No standalone website, but they link to an external page from their Instagram bio.
+                        No independent website found via Google, but they have an external link in their Instagram bio — that's their current web presence.
                       </p>
                       <a
                         href={lead.instagram_external_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-purple-400 hover:text-purple-300 transition-colors mt-1 inline-block truncate max-w-xs"
+                        className="text-xs text-amber-400 hover:text-amber-300 transition-colors mt-1 inline-block truncate max-w-xs"
                       >
                         {lead.instagram_external_url} ↗
                       </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/25">
+                    <Globe2 className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-red-300">No Website Found</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        This clinic has no website and no bio link — completely invisible to online searches. Prime opportunity to pitch a full web presence.
+                      </p>
                     </div>
                   </div>
                 )}

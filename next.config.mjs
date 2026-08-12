@@ -8,7 +8,15 @@ const nextConfig = {
       { protocol: "https", hostname: "**.supabase.co" },
     ],
   },
-  serverExternalPackages: ["axios"],
+  experimental: {
+    // Playwright and its Chromium binary must never be bundled — webpack cannot
+    // resolve their optional native/runtime deps (chromium-bidi, etc.).
+    serverComponentsExternalPackages: [
+      "axios",
+      "playwright-core",
+      "@sparticuz/chromium",
+    ],
+  },
 };
 
 export default nextConfig;

@@ -1,5 +1,6 @@
 import { runApifyActor, APIFY_ACTORS } from "@/lib/apify";
 import { withRetry, buildSearchQuery } from "@/lib/utils";
+import { filterByRegion } from "@/services/scraping/geo";
 import type { GoogleMapsPlace, SearchParams } from "@/types";
 
 interface ApifyGoogleMapsResult {
@@ -29,6 +30,9 @@ export async function scrapeGoogleMaps(
         searchStringsArray: [query],
         maxCrawledPlacesPerSearch: limit,
         language: "en",
+        // Without a country constraint the actor returns worldwide matches —
+        // "PR Agencies Delhi" was pulling in Delhi, New York businesses.
+        countryCode: params.countryCode ?? "in",
         maxReviews: 0,
         exportPlaceUrls: false,
         additionalInfo: false,
@@ -39,15 +43,29 @@ export async function scrapeGoogleMaps(
     })
   );
 
-  return rawResults
-    .filter((r) => r.title && r.placeId)
+  const inRegion = filterByRegion(
+    rawResults.filter((r) => r.title && r.placeId),
+    params.countryCode ?? "in"
+  );
+
+  if (inRegion.rejected.length > 0) {
+    console.info(
+      `[googleMaps] dropped ${inRegion.rejected.length} out-of-region result(s) for "${query}":`,
+      inRegion.rejected.map((r) => `${r.title} — ${r.address}`).slice(0, 5)
+    );
+  }
+
+  return inRegion.kept
     .filter((r) => {
       if (params.minRating && (r.totalScore ?? 0) < params.minRating) return false;
       if (params.maxRating && (r.totalScore ?? 5) > params.maxRating) return false;
       return true;
     })
     .map((r): GoogleMapsPlace => ({
-      place_id: r.placeId ?? "",
+      // null, not "" — place_id is UNIQUE, and Postgres allows repeated NULLs
+      // but only one "". An empty fallback silently discards every later lead
+      // that is missing a placeId.
+      place_id: r.placeId || null,
       clinic_name: r.title ?? "Unknown",
       category: r.categoryName ?? params.niche,
       address: r.address ?? "",

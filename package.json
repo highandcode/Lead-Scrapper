@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 5000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -22,6 +22,7 @@
     "@radix-ui/react-switch": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.2",
+    "@sparticuz/chromium": "^131.0.1",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.44.2",
     "axios": "^1.7.2",
@@ -33,6 +34,7 @@
     "next": "14.2.5",
     "openai": "^4.104.0",
     "papaparse": "^5.4.1",
+    "playwright-core": "^1.49.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.52.1",
@@ -50,6 +52,7 @@
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.5",
+    "playwright": "^1.49.1",
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.6",
     "tailwindcss-animate": "^1.0.7",

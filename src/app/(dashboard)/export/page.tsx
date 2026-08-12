@@ -14,7 +14,10 @@ export default function ExportPage() {
   function buildExportUrl() {
     const params = new URLSearchParams();
     if (city && city !== "all") params.set("city", city);
-    if (status && status !== "all") params.set("status", status);
+    // Param name must match what /api/export parses ("status" was ignored).
+    if (status && status !== "all") params.set("outreach_status", status);
+    params.set("sortBy", "lead_score");
+    params.set("sortOrder", "desc");
     return `/api/export?${params}`;
   }
 

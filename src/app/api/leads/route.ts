@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireApiAuth } from "@/lib/api-auth";
+import { parseLeadFilters, applyLeadFilters, applyLeadSort } from "@/lib/lead-filters";
 import type { LeadFilters, PaginatedLeads, DashboardStats } from "@/types";
 
 export async function GET(request: NextRequest) {
@@ -9,44 +10,26 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
   const filters: LeadFilters = {
-    search: searchParams.get("search") ?? undefined,
-    city: searchParams.get("city") ?? undefined,
-    category: searchParams.get("category") ?? undefined,
-    outreach_status: (searchParams.get("outreach_status") as LeadFilters["outreach_status"]) ?? undefined,
-    minScore: searchParams.get("minScore") ? Number(searchParams.get("minScore")) : undefined,
-    maxScore: searchParams.get("maxScore") ? Number(searchParams.get("maxScore")) : undefined,
-    hasWebsite: searchParams.get("hasWebsite") === "true" ? true : undefined,
-    hasInstagram: searchParams.get("hasInstagram") === "true" ? true : undefined,
-    data_source: searchParams.get("data_source") ?? undefined,
-    sortBy: (searchParams.get("sortBy") as LeadFilters["sortBy"]) ?? "created_at",
-    sortOrder: (searchParams.get("sortOrder") as "asc" | "desc") ?? "desc",
+    ...parseLeadFilters(searchParams),
     page: Number(searchParams.get("page") ?? 1),
     pageSize: Number(searchParams.get("pageSize") ?? 20),
   };
 
-  // Stats request
-  if (searchParams.get("stats") === "true") {
-    return getStats();
-  }
-
   try {
+    // Stats request
+    if (searchParams.get("stats") === "true") {
+      return await getStats();
+    }
+
+    // Distinct niches/categories request (for populating the niche filter dynamically)
+    if (searchParams.get("categories") === "true") {
+      return await getCategories(filters.data_source);
+    }
+
     let query = supabaseAdmin.from("leads").select("*", { count: "exact" });
 
-    if (filters.search) {
-      query = query.ilike("clinic_name", `%${filters.search}%`);
-    }
-    if (filters.city) query = query.eq("city", filters.city);
-    if (filters.category) query = query.ilike("category", `%${filters.category}%`);
-    if (filters.outreach_status) query = query.eq("outreach_status", filters.outreach_status);
-    if (filters.minScore != null) query = query.gte("lead_score", filters.minScore);
-    if (filters.maxScore != null) query = query.lte("lead_score", filters.maxScore);
-    if (filters.hasWebsite) query = query.not("website", "is", null);
-    if (filters.hasInstagram) query = query.not("instagram_username", "is", null);
-    if (filters.data_source) query = query.eq("data_source", filters.data_source);
-
-    const sortCol = filters.sortBy ?? "created_at";
-    const ascending = filters.sortOrder === "asc";
-    query = query.order(sortCol, { ascending, nullsFirst: false });
+    query = applyLeadFilters(query, filters);
+    query = applyLeadSort(query, filters);
 
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 20;
@@ -70,6 +53,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    // A connection-level failure arrives here as a bare `TypeError: fetch
+    // failed`, which says nothing on its own — log the cause, and still answer
+    // with JSON so the caller gets a message instead of a 500 HTML page it
+    // cannot parse.
+    console.error("[api/leads] GET failed:", error);
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -102,6 +90,23 @@ async function getStats() {
   };
 
   return NextResponse.json(stats);
+}
+
+async function getCategories(dataSource?: string) {
+  let query = supabaseAdmin.from("leads").select("category").not("category", "is", null);
+  if (dataSource) query = query.eq("data_source", dataSource);
+
+  const { data, error } = await query;
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const categories = Array.from(
+    new Set((data ?? []).map((l) => l.category as string).map((c) => c.trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  return NextResponse.json({ categories });
 }
 
 export async function POST(request: NextRequest) {
