@@ -19,6 +19,7 @@ export interface UserPermissions {
     leadsWrite: boolean;   // can import / add leads
     leadsDelete: boolean;  // can delete leads
     analyze: boolean;      // can run AI analysis
+    viewScore: boolean;    // can see the AI lead score (table column + detail page)
   };
 }
 
@@ -37,6 +38,7 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
     leadsWrite: true,
     leadsDelete: false,
     analyze: true,
+    viewScore: true,
   },
 };
 

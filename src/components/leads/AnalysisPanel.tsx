@@ -14,6 +14,7 @@ import type { Lead } from "@/types";
 
 interface AnalysisPanelProps {
   lead: Lead;
+  showScore?: boolean;
 }
 
 function SectionCard({ title, icon: Icon, children }: {
@@ -45,7 +46,7 @@ function CheckItem({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-export default function AnalysisPanel({ lead }: AnalysisPanelProps) {
+export default function AnalysisPanel({ lead, showScore = true }: AnalysisPanelProps) {
   const wa = lead.website_analysis;
   const score = lead.lead_score;
   const breakdown = lead.score_breakdown;
@@ -53,42 +54,44 @@ export default function AnalysisPanel({ lead }: AnalysisPanelProps) {
   return (
     <div className="space-y-5">
       {/* Score Overview */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-xl border border-white/8 bg-card p-6"
-      >
-        <div className="flex items-start gap-6">
-          <ScoreRing score={score} size="lg" />
-          <div className="flex-1 space-y-3">
-            <div>
-              <h3 className="font-semibold text-foreground">AI Lead Score</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {lead.score_reasoning ?? "Run AI analysis to generate a score and outreach messages."}
-              </p>
-            </div>
-
-            {breakdown && (
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "Website", value: breakdown.websiteScore },
-                  { label: "Instagram", value: breakdown.instagramScore },
-                  { label: "Conversion", value: breakdown.conversionScore },
-                  { label: "Automation", value: breakdown.automationScore },
-                ].map((item) => (
-                  <div key={item.label} className="space-y-1.5">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">{item.label}</span>
-                      <span className={getLeadScoreColor(item.value)}>{item.value}</span>
-                    </div>
-                    <Progress value={item.value} />
-                  </div>
-                ))}
+      {showScore && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-xl border border-white/8 bg-card p-6"
+        >
+          <div className="flex items-start gap-6">
+            <ScoreRing score={score} size="lg" />
+            <div className="flex-1 space-y-3">
+              <div>
+                <h3 className="font-semibold text-foreground">AI Lead Score</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {lead.score_reasoning ?? "Run AI analysis to generate a score and outreach messages."}
+                </p>
               </div>
-            )}
+
+              {breakdown && (
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "Website", value: breakdown.websiteScore },
+                    { label: "Instagram", value: breakdown.instagramScore },
+                    { label: "Conversion", value: breakdown.conversionScore },
+                    { label: "Automation", value: breakdown.automationScore },
+                  ].map((item) => (
+                    <div key={item.label} className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">{item.label}</span>
+                        <span className={getLeadScoreColor(item.value)}>{item.value}</span>
+                      </div>
+                      <Progress value={item.value} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* Clinic Info */}
       <motion.div

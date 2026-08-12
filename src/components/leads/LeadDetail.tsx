@@ -58,6 +58,8 @@ export default function LeadDetail() {
   const canAnalyze = isAdmin || (profile?.permissions?.actions.analyze ?? DEFAULT_PERMISSIONS.actions.analyze);
   // Gated on Google Leads only — everywhere else AI tools stay available to all roles.
   const showAnalyze = !isGoogleLeads || canAnalyze;
+  // Score visibility applies everywhere (not just Google Leads).
+  const canViewScore = isAdmin || (profile?.permissions?.actions.viewScore ?? DEFAULT_PERMISSIONS.actions.viewScore);
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -235,7 +237,7 @@ export default function LeadDetail() {
         >
           <div className="flex items-center gap-5">
             {/* Score */}
-            <ScoreRing score={lead.lead_score} size="lg" />
+            {canViewScore && <ScoreRing score={lead.lead_score} size="lg" />}
 
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
@@ -399,7 +401,7 @@ export default function LeadDetail() {
           </TabsList>
 
           <TabsContent value="analysis">
-            <AnalysisPanel lead={lead} />
+            <AnalysisPanel lead={lead} showScore={canViewScore} />
           </TabsContent>
 
           <TabsContent value="outreach">

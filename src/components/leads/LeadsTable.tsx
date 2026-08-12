@@ -149,6 +149,10 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
   const canAnalyze = isAdmin || (profile?.permissions?.actions.analyze ?? DEFAULT_PERMISSIONS.actions.analyze);
   // Gated on Google Leads only — everywhere else AI tools stay available to all roles.
   const showAnalyze = !isGoogleLeads || canAnalyze;
+  // Score visibility applies everywhere (not just Google Leads) — an admin
+  // may not want any role seeing the AI score at all.
+  const canViewScore = isAdmin || (profile?.permissions?.actions.viewScore ?? DEFAULT_PERMISSIONS.actions.viewScore);
+  const columnCount = 7 + (canViewScore ? 1 : 0);
   const router     = useRouter();
   const pathname   = usePathname();
   const rawParams  = useSearchParams();
@@ -869,11 +873,13 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
                   </button>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Presence</th>
-                <th className="px-4 py-3 text-left">
-                  <button onClick={() => handleSort("lead_score")} className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground">
-                    Score <SortIcon col="lead_score" />
-                  </button>
-                </th>
+                {canViewScore && (
+                  <th className="px-4 py-3 text-left">
+                    <button onClick={() => handleSort("lead_score")} className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground">
+                      Score <SortIcon col="lead_score" />
+                    </button>
+                  </th>
+                )}
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
@@ -882,14 +888,14 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: columnCount }).map((_, j) => (
                       <td key={j} className="px-4 py-4"><div className="h-4 bg-white/5 rounded" /></td>
                     ))}
                   </tr>
                 ))
               ) : data.leads.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-16 text-center">
+                  <td colSpan={columnCount} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Search className="w-8 h-8 text-muted-foreground opacity-30" />
                       <p className="text-muted-foreground text-sm">
@@ -923,6 +929,7 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
                     isGoogleLeads={isGoogleLeads}
                     showAnalyze={showAnalyze}
                     selectedTemplate={selectedTemplate}
+                    canViewScore={canViewScore}
                   />
                 ))
               )}
@@ -984,11 +991,12 @@ interface LeadRowProps {
   allowDelete?: boolean; onDelete?: () => void;
   isGoogleLeads?: boolean; showAnalyze?: boolean;
   selectedTemplate?: WhatsAppTemplate | null;
+  canViewScore?: boolean;
 }
 
 function LeadRow({
   lead, basePath, selected, onSelect, onAnalyze, analyzing, onStatusChange, allowDelete, onDelete,
-  isGoogleLeads, showAnalyze = true, selectedTemplate,
+  isGoogleLeads, showAnalyze = true, selectedTemplate, canViewScore = true,
 }: LeadRowProps) {
   const whatsAppText = selectedTemplate
     ? resolveTemplate(selectedTemplate.content, {
@@ -1068,17 +1076,19 @@ function LeadRow({
         </div>
       </td>
 
-      <td className="px-4 py-3.5">
-        {lead.lead_score != null ? (
-          <ScoreRing score={lead.lead_score} size="sm" showLabel={false} />
-        ) : showAnalyze ? (
-          <Button variant="ghost" size="icon-sm" onClick={onAnalyze} disabled={analyzing} title="Analyze">
-            {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5 text-muted-foreground" />}
-          </Button>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </td>
+      {canViewScore && (
+        <td className="px-4 py-3.5">
+          {lead.lead_score != null ? (
+            <ScoreRing score={lead.lead_score} size="sm" showLabel={false} />
+          ) : showAnalyze ? (
+            <Button variant="ghost" size="icon-sm" onClick={onAnalyze} disabled={analyzing} title="Analyze">
+              {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5 text-muted-foreground" />}
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+      )}
 
       <td className="px-4 py-3.5">
         <Select value={lead.outreach_status} onValueChange={v => onStatusChange(v as OutreachStatus)}>

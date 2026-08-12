@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Shield, LayoutDashboard, Users, Search,
   BookOpen, ListFilter, Download, Brain, Trash2, PenLine, Loader2, Check,
-  Globe, Sparkles,
+  Globe, Sparkles, Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -228,6 +228,11 @@ export default function PermissionsModal({ user, onClose, onUpdated }: Permissio
                   icon={Brain} label="Run AI Analysis" description="Analyze leads, generate scores & outreach"
                   iconClass="bg-pink-500/10" enabled={isAdmin || perms.actions.analyze}
                   onChange={v => setAction("analyze", v)} disabled={isAdmin}
+                />
+                <PermRow
+                  icon={Gauge} label="View Score" description="See the AI lead score in tables and lead pages"
+                  iconClass="bg-cyan-500/10" enabled={isAdmin || perms.actions.viewScore}
+                  onChange={v => setAction("viewScore", v)} disabled={isAdmin}
                 />
                 <PermRow
                   icon={Trash2} label="Delete Leads" description="Permanently remove leads from the system"
