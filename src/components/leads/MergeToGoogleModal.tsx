@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, Check, CalendarRange } from "lucide-react";
+import { Sparkles, Check, CalendarRange, Layers } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogBody, DialogFooter,
@@ -25,6 +25,7 @@ export default function MergeToGoogleModal({
   open, onClose, categories, onMerged, initialDateFrom = "", initialDateTo = "",
 }: MergeToGoogleModalProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [allCategories, setAllCategories] = useState(false);
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
   const [dateTo, setDateTo] = useState(initialDateTo);
   const [merging, setMerging] = useState(false);
@@ -48,20 +49,22 @@ export default function MergeToGoogleModal({
 
   function handleClose() {
     setSelected(new Set());
+    setAllCategories(false);
     setDateFrom("");
     setDateTo("");
     onClose();
   }
 
   async function merge() {
-    if (selected.size === 0) return;
+    if (!allCategories && selected.size === 0) return;
     setMerging(true);
     try {
       const res = await fetch("/api/leads/merge-to-google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          categories: Array.from(selected),
+          categories: allCategories ? undefined : Array.from(selected),
+          allCategories: allCategories || undefined,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
         }),
@@ -120,10 +123,37 @@ export default function MergeToGoogleModal({
             </div>
           </div>
 
+          <button
+            type="button"
+            onClick={() => setAllCategories((v) => !v)}
+            className={cn(
+              "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm text-left transition-colors mb-2",
+              allCategories
+                ? "border-primary/50 bg-primary/10 text-foreground"
+                : "border-white/8 bg-white/2 text-muted-foreground hover:bg-white/5"
+            )}
+          >
+            <span
+              className={cn(
+                "w-4 h-4 rounded flex items-center justify-center border shrink-0",
+                allCategories ? "bg-primary border-primary" : "border-white/20"
+              )}
+            >
+              {allCategories && <Check className="w-3 h-3 text-primary-foreground" />}
+            </span>
+            <Layers className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              <span className="font-medium text-foreground">Merge with All Niches</span>
+              <span className="block text-xs text-muted-foreground">
+                Every category in the date range above, categorized or not
+              </span>
+            </span>
+          </button>
+
           {categories.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">No categories found yet.</p>
           ) : (
-            <div className="max-h-72 overflow-y-auto space-y-1 pr-1">
+            <div className={cn("max-h-72 overflow-y-auto space-y-1 pr-1", allCategories && "opacity-40 pointer-events-none")}>
               {categories.map((category) => {
                 const checked = selected.has(category);
                 return (
@@ -156,8 +186,12 @@ export default function MergeToGoogleModal({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={merging}>Cancel</Button>
-          <Button variant="gradient" onClick={merge} disabled={merging || selected.size === 0}>
-            {merging ? "Merging…" : `Merge ${selected.size || ""} ${selected.size === 1 ? "Category" : "Categories"}`}
+          <Button variant="gradient" onClick={merge} disabled={merging || (!allCategories && selected.size === 0)}>
+            {merging
+              ? "Merging…"
+              : allCategories
+                ? "Merge All Niches"
+                : `Merge ${selected.size || ""} ${selected.size === 1 ? "Category" : "Categories"}`}
           </Button>
         </DialogFooter>
       </DialogContent>
