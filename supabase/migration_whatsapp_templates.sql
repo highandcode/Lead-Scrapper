@@ -26,3 +26,13 @@ ALTER TABLE whatsapp_templates ENABLE ROW LEVEL SECURITY;
 -- just mirrors their permissive "service role handles it" policy.
 CREATE POLICY "Service role full access whatsapp_templates" ON whatsapp_templates
   FOR ALL USING (true);
+
+-- Seed a default template so the list isn't empty for users before an admin
+-- adds their own. Dated ahead of NOW() so it always sorts first (the API
+-- orders by created_at ascending) regardless of what gets added later.
+INSERT INTO whatsapp_templates (name, content, created_at)
+SELECT
+  'Introduction',
+  'Hi {{name}}, hope you''re doing well! I came across your business in {{city}} and wanted to reach out — we help businesses like yours grow with better online visibility and more leads. Would you be open to a quick chat this week?',
+  '2026-08-01T00:00:00+00:00'
+WHERE NOT EXISTS (SELECT 1 FROM whatsapp_templates WHERE name = 'Introduction');
