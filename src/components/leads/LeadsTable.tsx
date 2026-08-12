@@ -152,7 +152,7 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
   // Score visibility applies everywhere (not just Google Leads) — an admin
   // may not want any role seeing the AI score at all.
   const canViewScore = isAdmin || (profile?.permissions?.actions.viewScore ?? DEFAULT_PERMISSIONS.actions.viewScore);
-  const columnCount = 7 + (canViewScore ? 1 : 0);
+  const columnCount = 7 + (canViewScore ? 1 : 0) + (isGoogleLeads ? 1 : 0);
   const router     = useRouter();
   const pathname   = usePathname();
   const rawParams  = useSearchParams();
@@ -709,12 +709,16 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
           </SelectContent>
         </Select>
 
-        {/* WhatsApp template picker — Google Leads only */}
+        {/* WhatsApp template picker — Google Leads only. Drives every row's
+            "Send WhatsApp" button in the WhatsApp column below. */}
         {isGoogleLeads && templates.length > 0 && (
           <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-            <SelectTrigger className={cn("w-44 h-9", selectedTemplateId !== "none" && "border-emerald-500/50 text-emerald-400")}>
+            <SelectTrigger
+              className={cn("w-52 h-9", selectedTemplateId !== "none" && "border-emerald-500/50 text-emerald-400")}
+              title="Applies to every row's Send WhatsApp button below"
+            >
               <WhatsAppIcon className="w-3.5 h-3.5 mr-1.5 shrink-0" />
-              <SelectValue placeholder="WhatsApp Template" />
+              <SelectValue placeholder="Choose template to send" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">No template</SelectItem>
@@ -881,6 +885,9 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
                   </th>
                 )}
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                {isGoogleLeads && (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">WhatsApp</th>
+                )}
                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -1107,6 +1114,24 @@ function LeadRow({
         </Select>
       </td>
 
+      {isGoogleLeads && (
+        <td className="px-4 py-3.5">
+          {whatsAppUrl ? (
+            <a href={whatsAppUrl} target="_blank" rel="noopener noreferrer">
+              <Button
+                variant="outline" size="sm"
+                title={whatsAppText ? "Opens WhatsApp with the selected template pre-filled" : "No template selected — opens a blank chat"}
+                className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-300"
+              >
+                <WhatsAppIcon className="w-3.5 h-3.5" /> Send WhatsApp
+              </Button>
+            </a>
+          ) : (
+            <span className="text-xs text-muted-foreground" title="No phone number for this lead">—</span>
+          )}
+        </td>
+      )}
+
       <td className="px-4 py-3.5">
         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <Link href={`${basePath}/${lead.id}`}>
@@ -1127,11 +1152,11 @@ function LeadRow({
               <Button variant="ghost" size="icon-sm" title="View on Maps"><ExternalLink className="w-3.5 h-3.5" /></Button>
             </a>
           )}
-          {whatsAppUrl && (
+          {!isGoogleLeads && whatsAppUrl && (
             <a href={whatsAppUrl} target="_blank" rel="noopener noreferrer">
               <Button
                 variant="ghost" size="icon-sm"
-                title={whatsAppText ? "Send WhatsApp template" : "Check on WhatsApp"}
+                title="Check on WhatsApp"
                 className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
               >
                 <WhatsAppIcon className="w-3.5 h-3.5" />
