@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Instagram, MessageCircle, Mail, RotateCcw,
-  Copy, Check, Loader2, Sparkles, Send, ExternalLink, Lightbulb
+  Copy, Check, Loader2, Sparkles, Send, ExternalLink, Lightbulb, Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -14,6 +14,9 @@ import type { Lead } from "@/types";
 interface OutreachPanelProps {
   lead: Lead;
   onRefresh?: (updated: Lead) => void;
+  /** false hides every AI-generation trigger (Generate/Regenerate/Suggest) —
+   * previously generated messages, if any, still display and stay sendable. */
+  allowAiGenerate?: boolean;
 }
 
 function cleanPhone(phone: string): string {
@@ -81,7 +84,7 @@ function MessageCard({
   );
 }
 
-export default function OutreachPanel({ lead, onRefresh }: OutreachPanelProps) {
+export default function OutreachPanel({ lead, onRefresh, allowAiGenerate = true }: OutreachPanelProps) {
   const [generating, setGenerating] = useState(false);
   const [suggestion, setSuggestion] = useState("");
   const [showSuggestion, setShowSuggestion] = useState(false);
@@ -153,6 +156,25 @@ export default function OutreachPanel({ lead, onRefresh }: OutreachPanelProps) {
   }
 
   if (!hasMessages) {
+    if (!allowAiGenerate) {
+      return (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center py-20 gap-3 text-center"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/8 flex items-center justify-center">
+            <Lock className="w-7 h-7 text-muted-foreground" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-foreground">AI Outreach Unavailable</h3>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+              Your account doesn't have access to AI-generated outreach messages. Use the WhatsApp templates above instead.
+            </p>
+          </div>
+        </motion.div>
+      );
+    }
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -182,25 +204,27 @@ export default function OutreachPanel({ lead, onRefresh }: OutreachPanelProps) {
           <h3 className="font-semibold text-foreground">Personalized Outreach</h3>
           <p className="text-xs text-muted-foreground mt-0.5">AI-crafted messages for {lead.clinic_name}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSuggestion((v) => !v)}
-            className={showSuggestion ? "border-amber-500/40 text-amber-400" : ""}
-          >
-            <Lightbulb className="w-3.5 h-3.5" />
-            Suggest
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => generateMessages()} disabled={generating}>
-            {generating ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Regenerating...</> : <><RotateCcw className="w-3.5 h-3.5" /> Regenerate</>}
-          </Button>
-        </div>
+        {allowAiGenerate && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSuggestion((v) => !v)}
+              className={showSuggestion ? "border-amber-500/40 text-amber-400" : ""}
+            >
+              <Lightbulb className="w-3.5 h-3.5" />
+              Suggest
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => generateMessages()} disabled={generating}>
+              {generating ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Regenerating...</> : <><RotateCcw className="w-3.5 h-3.5" /> Regenerate</>}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Suggestion box */}
       <AnimatePresence>
-        {showSuggestion && (
+        {allowAiGenerate && showSuggestion && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}

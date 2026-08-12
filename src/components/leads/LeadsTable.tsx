@@ -27,6 +27,7 @@ import { leadFiltersToParams } from "@/lib/lead-filters";
 import { useUser } from "@/hooks/useUser";
 import toast from "react-hot-toast";
 import type { Lead, LeadFilters, PaginatedLeads, OutreachStatus, WhatsAppTemplate } from "@/types";
+import { DEFAULT_PERMISSIONS } from "@/types";
 
 const STATUS_OPTIONS: { value: OutreachStatus | "all"; label: string }[] = [
   { value: "all", label: "All Statuses" },
@@ -140,9 +141,12 @@ function basePathFor(dataSource?: string): string {
 export default function LeadsTable({ initialData, dataSource, allowDelete }: LeadsTableProps) {
   const basePath = basePathFor(dataSource);
   const isGoogleLeads = dataSource === "google_search";
-  const { isAdmin } = useUser();
-  // AI analysis is an admin-only tool on Google Leads — everywhere else it's available to all roles.
-  const showAnalyze = !isGoogleLeads || isAdmin;
+  const { isAdmin, profile } = useUser();
+  // Admins always have access; everyone else follows their per-user "Run AI
+  // Analysis" permission (defaults to on, same as Sidebar.tsx's page checks).
+  const canAnalyze = isAdmin || (profile?.permissions?.actions.analyze ?? DEFAULT_PERMISSIONS.actions.analyze);
+  // Gated on Google Leads only — everywhere else AI tools stay available to all roles.
+  const showAnalyze = !isGoogleLeads || canAnalyze;
   const router     = useRouter();
   const pathname   = usePathname();
   const rawParams  = useSearchParams();

@@ -19,6 +19,7 @@ import { getStatusColor, toWhatsAppUrl, resolveTemplate } from "@/lib/utils";
 import { useUser } from "@/hooks/useUser";
 import toast from "react-hot-toast";
 import type { Lead, OutreachStatus, WhatsAppTemplate } from "@/types";
+import { DEFAULT_PERMISSIONS } from "@/types";
 
 // WhatsApp brand SVG (Lucide doesn't have one) — matches LeadsTable's icon.
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -51,9 +52,12 @@ export default function LeadDetail() {
   // under — /leads, /jd-leads or /google-leads — without hardcoding it.
   const basePath = pathname.replace(/\/[^/]+$/, "") || "/leads";
   const isGoogleLeads = basePath === "/google-leads";
-  const { isAdmin } = useUser();
-  // AI analysis is an admin-only tool on Google Leads — everywhere else it's available to all roles.
-  const showAnalyze = !isGoogleLeads || isAdmin;
+  const { isAdmin, profile } = useUser();
+  // Admins always have access; everyone else follows their per-user "Run AI
+  // Analysis" permission (defaults to on, same as Sidebar.tsx's page checks).
+  const canAnalyze = isAdmin || (profile?.permissions?.actions.analyze ?? DEFAULT_PERMISSIONS.actions.analyze);
+  // Gated on Google Leads only — everywhere else AI tools stay available to all roles.
+  const showAnalyze = !isGoogleLeads || canAnalyze;
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -399,7 +403,7 @@ export default function LeadDetail() {
           </TabsContent>
 
           <TabsContent value="outreach">
-            <OutreachPanel lead={lead} onRefresh={setLead} />
+            <OutreachPanel lead={lead} onRefresh={setLead} allowAiGenerate={showAnalyze} />
           </TabsContent>
         </Tabs>
       </div>
