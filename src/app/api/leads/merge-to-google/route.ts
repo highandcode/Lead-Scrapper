@@ -21,27 +21,41 @@ interface CandidateRow {
 }
 
 // POST /api/leads/merge-to-google — relabel existing leads in the given
-// categories as data_source="google_search" so they show up under Google
-// Leads, skipping any that already have an equivalent there (place_id,
-// phone, or name+city match).
+// categories (optionally narrowed to a created_at date range) as
+// data_source="google_search" so they show up under Google Leads, skipping
+// any that already have an equivalent there (place_id, phone, or name+city
+// match).
 export async function POST(request: NextRequest) {
   const { response } = await requireApiPermission("leadsWrite");
   if (response) return response;
 
   try {
-    const { categories } = (await request.json()) as { categories?: string[] };
+    const { categories, dateFrom, dateTo } = (await request.json()) as {
+      categories?: string[];
+      dateFrom?: string;
+      dateTo?: string;
+    };
 
     if (!Array.isArray(categories) || categories.length === 0) {
       return NextResponse.json({ error: "categories is required" }, { status: 400 });
     }
 
+    let candidateQuery = supabaseAdmin
+      .from("leads")
+      .select("id, place_id, clinic_name, city, phone")
+      .in("category", categories)
+      .neq("data_source", "google_search");
+    // Scoped to when the lead was first scraped — same field and convention
+    // the table's own date filter uses (lib/lead-filters.ts).
+    if (dateFrom) candidateQuery = candidateQuery.gte("created_at", dateFrom);
+    if (dateTo) candidateQuery = candidateQuery.lte("created_at", `${dateTo}T23:59:59.999`);
+
+    // Duplicate check always runs against the *entire* existing Google Leads
+    // set, regardless of the date range being merged — a match found there
+    // still counts as a duplicate no matter when it was added.
     const [{ data: candidates, error: candErr }, { data: existing, error: existErr }] =
       await Promise.all([
-        supabaseAdmin
-          .from("leads")
-          .select("id, place_id, clinic_name, city, phone")
-          .in("category", categories)
-          .neq("data_source", "google_search"),
+        candidateQuery,
         supabaseAdmin
           .from("leads")
           .select("place_id, clinic_name, city, phone")

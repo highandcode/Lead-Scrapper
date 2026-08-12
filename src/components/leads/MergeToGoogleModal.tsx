@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Sparkles, Check, CalendarRange } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogBody, DialogFooter,
@@ -16,11 +16,27 @@ interface MergeToGoogleModalProps {
   categories: string[];
   /** Called after a successful merge so the caller can refresh its data. */
   onMerged: () => void;
+  /** Pre-fills the date range from the table's own active filters, if any. */
+  initialDateFrom?: string;
+  initialDateTo?: string;
 }
 
-export default function MergeToGoogleModal({ open, onClose, categories, onMerged }: MergeToGoogleModalProps) {
+export default function MergeToGoogleModal({
+  open, onClose, categories, onMerged, initialDateFrom = "", initialDateTo = "",
+}: MergeToGoogleModalProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [dateFrom, setDateFrom] = useState(initialDateFrom);
+  const [dateTo, setDateTo] = useState(initialDateTo);
   const [merging, setMerging] = useState(false);
+
+  // Re-sync from the table's current filters each time the modal opens —
+  // it stays mounted between opens, so state wouldn't otherwise refresh.
+  useEffect(() => {
+    if (open) {
+      setDateFrom(initialDateFrom);
+      setDateTo(initialDateTo);
+    }
+  }, [open, initialDateFrom, initialDateTo]);
 
   function toggle(category: string) {
     setSelected((prev) => {
@@ -32,6 +48,8 @@ export default function MergeToGoogleModal({ open, onClose, categories, onMerged
 
   function handleClose() {
     setSelected(new Set());
+    setDateFrom("");
+    setDateTo("");
     onClose();
   }
 
@@ -42,7 +60,11 @@ export default function MergeToGoogleModal({ open, onClose, categories, onMerged
       const res = await fetch("/api/leads/merge-to-google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categories: Array.from(selected) }),
+        body: JSON.stringify({
+          categories: Array.from(selected),
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Merge failed");
@@ -75,6 +97,29 @@ export default function MergeToGoogleModal({ open, onClose, categories, onMerged
         </DialogHeader>
 
         <DialogBody>
+          <div className="mb-4 space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <CalendarRange className="w-3.5 h-3.5" /> Scraped between (optional)
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary/50"
+              />
+              <span className="text-muted-foreground text-xs">–</span>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+
           {categories.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">No categories found yet.</p>
           ) : (

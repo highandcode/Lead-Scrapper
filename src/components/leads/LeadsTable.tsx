@@ -976,6 +976,8 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
           onClose={() => setMergeModalOpen(false)}
           categories={nicheOptions}
           onMerged={() => fetchLeads(toApiFilters(ui))}
+          initialDateFrom={ui.dateFrom}
+          initialDateTo={ui.dateTo}
         />
       )}
     </div>
