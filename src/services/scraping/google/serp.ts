@@ -1,4 +1,5 @@
 import { launchBrowser, createContext } from "./browser";
+import { cleanCategoryText, CATEGORY_RATING_PREFIX } from "@/services/scraping/dedupe";
 import type { SerpLocalResult, SerpOrganicResult } from "./types";
 
 /**
@@ -173,10 +174,12 @@ export async function searchGoogle(
           name,
           rating: rating ? Number(rating[1]) : null,
           reviewCount: rating ? Number(rating[2].replace(/,/g, "")) : null,
-          address: r.lines.find((l) => /\d/.test(l) && l.length > 12) ?? null,
+          // Exclude the rating+category line ("4.6(75) · Marketing agency") —
+          // it has a digit and is long enough to otherwise look like an address.
+          address: r.lines.find((l) => /\d/.test(l) && l.length > 12 && !CATEGORY_RATING_PREFIX.test(l)) ?? null,
           phone: phone?.[0] ?? null,
           website: r.website,
-          category: r.lines[1] ?? null,
+          category: cleanCategoryText(r.lines[1]),
           rank: local.length + 1,
         });
         if (local.length >= opts.limit) break;

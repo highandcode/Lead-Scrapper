@@ -17,6 +17,20 @@ import { supabaseAdmin } from "@/lib/supabase";
 const PHONE_PLACEHOLDERS = new Set(["show number", "n/a", "na", "-", ""]);
 
 /**
+ * Google's local pack sometimes renders a listing's rating and category on
+ * one line ("4.6(75) · Marketing agency") instead of separate lines, so a
+ * naive "category is the second line" scrape captures the rating too. Strip
+ * a leading "<rating>(<count>) · " or "No reviews · " prefix, if present.
+ */
+export const CATEGORY_RATING_PREFIX = /^(?:\d\.\d\(\+?[\d,]+\)|No reviews)\s*[·\-–]\s*/i;
+
+export function cleanCategoryText(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const cleaned = raw.trim().replace(CATEGORY_RATING_PREFIX, "").trim();
+  return cleaned || null;
+}
+
+/**
  * Strip the query string and fragment from a listing URL so the same listing
  * produces one stable id regardless of which search surfaced it.
  */

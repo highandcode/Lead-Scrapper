@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireApiAuth } from "@/lib/api-auth";
 import { parseLeadFilters, applyLeadFilters, applyLeadSort } from "@/lib/lead-filters";
+import { cleanCategoryText } from "@/services/scraping/dedupe";
 import type { LeadFilters, PaginatedLeads, DashboardStats } from "@/types";
 
 export async function GET(request: NextRequest) {
@@ -102,9 +103,21 @@ async function getCategories(dataSource?: string) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const categories = Array.from(
-    new Set((data ?? []).map((l) => l.category as string).map((c) => c.trim()).filter(Boolean))
-  ).sort((a, b) => a.localeCompare(b));
+  // Some stored categories still carry a scraped-in rating prefix
+  // ("4.6(75) · Marketing agency" — see cleanCategoryText), and different
+  // scrapers capitalize the same category differently ("PR Agency" vs
+  // "pr agency"). A plain Set treats every one of those as a distinct entry,
+  // so dedupe on a cleaned + normalized key instead, keeping the first-seen
+  // cleaned casing to display.
+  const byKey = new Map<string, string>();
+  for (const row of data ?? []) {
+    const cleaned = cleanCategoryText(row.category as string | null);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase().replace(/\s+/g, " ");
+    if (!byKey.has(key)) byKey.set(key, cleaned);
+  }
+
+  const categories = Array.from(byKey.values()).sort((a, b) => a.localeCompare(b));
 
   return NextResponse.json({ categories });
 }
