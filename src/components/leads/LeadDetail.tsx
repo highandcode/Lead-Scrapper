@@ -15,9 +15,19 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ScoreRing from "@/components/shared/ScoreRing";
-import { getStatusColor, toWhatsAppUrl } from "@/lib/utils";
+import { getStatusColor, toWhatsAppUrl, resolveTemplate } from "@/lib/utils";
+import { useUser } from "@/hooks/useUser";
 import toast from "react-hot-toast";
-import type { Lead, OutreachStatus } from "@/types";
+import type { Lead, OutreachStatus, WhatsAppTemplate } from "@/types";
+
+// WhatsApp brand SVG (Lucide doesn't have one) — matches LeadsTable's icon.
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+    </svg>
+  );
+}
 
 const STATUS_OPTIONS: OutreachStatus[] = [
   "new", "researched", "contacted", "replied", "meeting_set", "closed", "not_interested", "not_on_wa_or_gmail"
@@ -40,6 +50,10 @@ export default function LeadDetail() {
   // Strip the trailing /[id] to recover whichever section this route lives
   // under — /leads, /jd-leads or /google-leads — without hardcoding it.
   const basePath = pathname.replace(/\/[^/]+$/, "") || "/leads";
+  const isGoogleLeads = basePath === "/google-leads";
+  const { isAdmin } = useUser();
+  // AI analysis is an admin-only tool on Google Leads — everywhere else it's available to all roles.
+  const showAnalyze = !isGoogleLeads || isAdmin;
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,6 +61,9 @@ export default function LeadDetail() {
   const [fetchingWa, setFetchingWa] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState("");
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
 
   useEffect(() => {
     fetch(`/api/leads/${id}`)
@@ -58,6 +75,16 @@ export default function LeadDetail() {
       })
       .catch(() => setLoading(false));
   }, [id]);
+
+  // Google Leads only — templates let users send a pre-filled WhatsApp
+  // message without needing AI-generated outreach copy.
+  useEffect(() => {
+    if (!isGoogleLeads) return;
+    fetch("/api/whatsapp-templates")
+      .then((r) => r.json())
+      .then((json) => setTemplates(Array.isArray(json) ? json : []))
+      .catch(() => {});
+  }, [isGoogleLeads]);
 
   async function runAnalysis() {
     if (!lead) return;
@@ -169,7 +196,7 @@ export default function LeadDetail() {
     <div>
       <Header
         title={lead.clinic_name}
-        subtitle={`${lead.category ?? "Clinic"} · ${lead.city ?? ""}`}
+        subtitle={isGoogleLeads ? (lead.city ?? "") : `${lead.category ?? "Clinic"} · ${lead.city ?? ""}`}
         actions={
           <div className="flex items-center gap-2">
             <a href={`/api/export?ids=${lead.id}`} target="_blank" rel="noopener noreferrer">
@@ -177,18 +204,20 @@ export default function LeadDetail() {
                 <Download className="w-3.5 h-3.5" /> Export
               </Button>
             </a>
-            <Button
-              variant={lead.lead_score == null ? "gradient" : "outline"}
-              size="sm"
-              onClick={runAnalysis}
-              disabled={analyzing}
-            >
-              {analyzing ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyzing...</>
-              ) : (
-                <><Brain className="w-3.5 h-3.5" /> {lead.lead_score == null ? "Run Analysis" : "Re-analyze"}</>
-              )}
-            </Button>
+            {showAnalyze && (
+              <Button
+                variant={lead.lead_score == null ? "gradient" : "outline"}
+                size="sm"
+                onClick={runAnalysis}
+                disabled={analyzing}
+              >
+                {analyzing ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyzing...</>
+                ) : (
+                  <><Brain className="w-3.5 h-3.5" /> {lead.lead_score == null ? "Run Analysis" : "Re-analyze"}</>
+                )}
+              </Button>
+            )}
           </div>
         }
       />
@@ -223,7 +252,7 @@ export default function LeadDetail() {
 
               {/* Badges */}
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                {lead.category && <span className="px-2 py-1 rounded-md bg-white/5 border border-white/8">{lead.category}</span>}
+                {!isGoogleLeads && lead.category && <span className="px-2 py-1 rounded-md bg-white/5 border border-white/8">{lead.category}</span>}
                 {lead.city && <span className="px-2 py-1 rounded-md bg-white/5 border border-white/8">{lead.city}</span>}
                 {lead.rating && <span className="px-2 py-1 rounded-md bg-white/5 border border-white/8">⭐ {lead.rating.toFixed(1)}</span>}
                 {lead.instagram_username && <span className="px-2 py-1 rounded-md bg-pink-500/10 border border-pink-500/20 text-pink-300">@{lead.instagram_username}</span>}
@@ -274,6 +303,51 @@ export default function LeadDetail() {
               <ArrowLeft className="w-3.5 h-3.5" /> Back
             </Button>
           </div>
+
+          {/* WhatsApp templates — Google Leads only */}
+          {isGoogleLeads && (
+            <div className="mt-4 pt-4 border-t border-white/8">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Send via WhatsApp</span>
+              {templates.length === 0 ? (
+                <p className="text-sm text-muted-foreground mt-2">
+                  No templates yet — an admin can add one under WhatsApp Templates.
+                </p>
+              ) : (
+                <div className="flex items-center gap-2 mt-2">
+                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                    <SelectTrigger className="h-9 w-56 text-sm">
+                      <SelectValue placeholder="Choose a template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {(() => {
+                    const text = selectedTemplate
+                      ? resolveTemplate(selectedTemplate.content, {
+                          name: lead.clinic_name, phone: lead.whatsapp_phone ?? lead.phone, city: lead.city, category: lead.category,
+                        })
+                      : undefined;
+                    const url = selectedTemplate ? toWhatsAppUrl(lead.whatsapp_phone, lead.phone, text) : null;
+                    return (
+                      <Button
+                        variant="gradient" size="sm"
+                        disabled={!url}
+                        onClick={() => url && window.open(url, "_blank", "noopener,noreferrer")}
+                      >
+                        <WhatsAppIcon className="w-3.5 h-3.5" /> Send on WhatsApp
+                      </Button>
+                    );
+                  })()}
+                  {!(lead.whatsapp_phone || lead.phone) && (
+                    <span className="text-xs text-muted-foreground">No phone number for this lead</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Notes */}
           <div className="mt-4 pt-4 border-t border-white/8">

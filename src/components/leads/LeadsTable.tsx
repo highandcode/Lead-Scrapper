@@ -22,10 +22,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import ScoreRing from "@/components/shared/ScoreRing";
-import { cn, getStatusColor, formatNumber, truncate, toWhatsAppUrl } from "@/lib/utils";
+import { cn, getStatusColor, formatNumber, truncate, toWhatsAppUrl, resolveTemplate } from "@/lib/utils";
 import { leadFiltersToParams } from "@/lib/lead-filters";
+import { useUser } from "@/hooks/useUser";
 import toast from "react-hot-toast";
-import type { Lead, LeadFilters, PaginatedLeads, OutreachStatus } from "@/types";
+import type { Lead, LeadFilters, PaginatedLeads, OutreachStatus, WhatsAppTemplate } from "@/types";
 
 const STATUS_OPTIONS: { value: OutreachStatus | "all"; label: string }[] = [
   { value: "all", label: "All Statuses" },
@@ -138,6 +139,10 @@ function basePathFor(dataSource?: string): string {
 
 export default function LeadsTable({ initialData, dataSource, allowDelete }: LeadsTableProps) {
   const basePath = basePathFor(dataSource);
+  const isGoogleLeads = dataSource === "google_search";
+  const { isAdmin } = useUser();
+  // AI analysis is an admin-only tool on Google Leads — everywhere else it's available to all roles.
+  const showAnalyze = !isGoogleLeads || isAdmin;
   const router     = useRouter();
   const pathname   = usePathname();
   const rawParams  = useSearchParams();
@@ -153,6 +158,9 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
   const [cleaning,    setCleaning]    = useState(false);
   const [renaming,    setRenaming]    = useState(false);
   const [nicheOptions, setNicheOptions] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Filter changes fire faster than the API answers; only the newest request
@@ -231,6 +239,16 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
       .then(json => setNicheOptions(json.categories ?? []))
       .catch(() => {});
   }, [dataSource]);
+
+  // Google Leads only — templates let users send a pre-filled WhatsApp
+  // message without needing AI-generated outreach copy.
+  useEffect(() => {
+    if (!isGoogleLeads) return;
+    fetch("/api/whatsapp-templates")
+      .then(res => res.json())
+      .then(json => setTemplates(Array.isArray(json) ? json : []))
+      .catch(() => {});
+  }, [isGoogleLeads]);
 
   // ── URL sync helper ────────────────────────────────────────
   function pushUrl(next: ReturnType<typeof filtersFromParams>) {
@@ -570,7 +588,7 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             className="pl-9 h-9"
-            placeholder="Search clinics…"
+            placeholder={isGoogleLeads ? "Search leads…" : "Search clinics…"}
             value={ui.search}
             onChange={e => handleSearch(e.target.value)}
           />
@@ -680,6 +698,22 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
           </SelectContent>
         </Select>
 
+        {/* WhatsApp template picker — Google Leads only */}
+        {isGoogleLeads && templates.length > 0 && (
+          <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+            <SelectTrigger className={cn("w-44 h-9", selectedTemplateId !== "none" && "border-emerald-500/50 text-emerald-400")}>
+              <WhatsAppIcon className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+              <SelectValue placeholder="WhatsApp Template" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No template</SelectItem>
+              {templates.map(t => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {/* Clear filters */}
         <AnimatePresence>
           {activeCount > 0 && (
@@ -702,7 +736,9 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
           {selectedIds.size > 0 && (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
-              <Button variant="outline" size="sm" onClick={analyzeSelected}><Brain className="w-3.5 h-3.5" /> Analyze</Button>
+              {showAnalyze && (
+                <Button variant="outline" size="sm" onClick={analyzeSelected}><Brain className="w-3.5 h-3.5" /> Analyze</Button>
+              )}
               <Button variant="outline" size="sm" onClick={findContacts} disabled={findingContacts}>
                 {findingContacts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />} Find Contacts
               </Button>
@@ -805,7 +841,7 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
                 </th>
                 <th className="px-4 py-3 text-left">
                   <button onClick={() => handleSort("clinic_name")} className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground">
-                    Clinic <SortIcon col="clinic_name" />
+                    {isGoogleLeads ? "Name" : "Clinic"} <SortIcon col="clinic_name" />
                   </button>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Contact</th>
@@ -839,12 +875,16 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
                     <div className="flex flex-col items-center gap-3">
                       <Search className="w-8 h-8 text-muted-foreground opacity-30" />
                       <p className="text-muted-foreground text-sm">
-                        {activeCount > 0 ? "No leads match your filters." : "No leads yet. Start by searching for clinics."}
+                        {activeCount > 0
+                          ? "No leads match your filters."
+                          : isGoogleLeads
+                            ? "No leads yet. Start by searching Google."
+                            : "No leads yet. Start by searching for clinics."}
                       </p>
                       {activeCount > 0 ? (
                         <Button variant="outline" size="sm" onClick={clearFilters}>Clear Filters</Button>
                       ) : (
-                        <Link href="/search"><Button variant="outline" size="sm">Find Leads</Button></Link>
+                        <Link href={isGoogleLeads ? "/google-search" : "/search"}><Button variant="outline" size="sm">Find Leads</Button></Link>
                       )}
                     </div>
                   </td>
@@ -862,6 +902,9 @@ export default function LeadsTable({ initialData, dataSource, allowDelete }: Lea
                     onStatusChange={s => updateStatus(lead.id, s)}
                     allowDelete={allowDelete}
                     onDelete={() => deleteLead(lead.id)}
+                    isGoogleLeads={isGoogleLeads}
+                    showAnalyze={showAnalyze}
+                    selectedTemplate={selectedTemplate}
                   />
                 ))
               )}
@@ -912,9 +955,20 @@ interface LeadRowProps {
   onSelect: () => void; onAnalyze: () => void;
   analyzing: boolean; onStatusChange: (s: OutreachStatus) => void;
   allowDelete?: boolean; onDelete?: () => void;
+  isGoogleLeads?: boolean; showAnalyze?: boolean;
+  selectedTemplate?: WhatsAppTemplate | null;
 }
 
-function LeadRow({ lead, basePath, selected, onSelect, onAnalyze, analyzing, onStatusChange, allowDelete, onDelete }: LeadRowProps) {
+function LeadRow({
+  lead, basePath, selected, onSelect, onAnalyze, analyzing, onStatusChange, allowDelete, onDelete,
+  isGoogleLeads, showAnalyze = true, selectedTemplate,
+}: LeadRowProps) {
+  const whatsAppText = selectedTemplate
+    ? resolveTemplate(selectedTemplate.content, {
+        name: lead.clinic_name, phone: lead.whatsapp_phone ?? lead.phone, city: lead.city, category: lead.category,
+      })
+    : undefined;
+  const whatsAppUrl = toWhatsAppUrl(lead.whatsapp_phone, lead.phone, whatsAppText);
   return (
     <motion.tr
       initial={{ opacity: 0 }}
@@ -930,8 +984,8 @@ function LeadRow({ lead, basePath, selected, onSelect, onAnalyze, analyzing, onS
         <Link href={`${basePath}/${lead.id}`} className="block">
           <p className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-1">{lead.clinic_name}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            {lead.category && <span className="text-[11px] text-muted-foreground">{lead.category}</span>}
-            {lead.city && <><span className="text-muted-foreground opacity-30">·</span><span className="text-[11px] text-muted-foreground">{lead.city}</span></>}
+            {!isGoogleLeads && lead.category && <span className="text-[11px] text-muted-foreground">{lead.category}</span>}
+            {lead.city && <>{!isGoogleLeads && lead.category && <span className="text-muted-foreground opacity-30">·</span>}<span className="text-[11px] text-muted-foreground">{lead.city}</span></>}
           </div>
         </Link>
       </td>
@@ -990,10 +1044,12 @@ function LeadRow({ lead, basePath, selected, onSelect, onAnalyze, analyzing, onS
       <td className="px-4 py-3.5">
         {lead.lead_score != null ? (
           <ScoreRing score={lead.lead_score} size="sm" showLabel={false} />
-        ) : (
+        ) : showAnalyze ? (
           <Button variant="ghost" size="icon-sm" onClick={onAnalyze} disabled={analyzing} title="Analyze">
             {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5 text-muted-foreground" />}
           </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </td>
 
@@ -1017,7 +1073,7 @@ function LeadRow({ lead, basePath, selected, onSelect, onAnalyze, analyzing, onS
           <Link href={`${basePath}/${lead.id}`}>
             <Button variant="ghost" size="icon-sm" title="View details"><ExternalLink className="w-3.5 h-3.5" /></Button>
           </Link>
-          {lead.lead_score == null && (
+          {lead.lead_score == null && showAnalyze && (
             <Button variant="ghost" size="icon-sm" onClick={onAnalyze} disabled={analyzing} title="AI Analyze">
               {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
             </Button>
@@ -1032,9 +1088,13 @@ function LeadRow({ lead, basePath, selected, onSelect, onAnalyze, analyzing, onS
               <Button variant="ghost" size="icon-sm" title="View on Maps"><ExternalLink className="w-3.5 h-3.5" /></Button>
             </a>
           )}
-          {toWhatsAppUrl(lead.whatsapp_phone, lead.phone) && (
-            <a href={toWhatsAppUrl(lead.whatsapp_phone, lead.phone)!} target="_blank" rel="noopener noreferrer">
-              <Button variant="ghost" size="icon-sm" title="Check on WhatsApp" className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10">
+          {whatsAppUrl && (
+            <a href={whatsAppUrl} target="_blank" rel="noopener noreferrer">
+              <Button
+                variant="ghost" size="icon-sm"
+                title={whatsAppText ? "Send WhatsApp template" : "Check on WhatsApp"}
+                className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+              >
                 <WhatsAppIcon className="w-3.5 h-3.5" />
               </Button>
             </a>

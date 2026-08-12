@@ -11,17 +11,36 @@ export function sleep(ms: number): Promise<void> {
 
 // Returns a wa.me URL for any Indian phone number format.
 // Pass whatsapp_phone first (real number), falls back to phone (JD tracking number).
+// An optional prefilled `text` is appended as the wa.me `text` query param.
 export function toWhatsAppUrl(
   whatsappPhone: string | null | undefined,
-  fallbackPhone?: string | null
+  fallbackPhone?: string | null,
+  text?: string
 ): string | null {
   const raw = whatsappPhone || fallbackPhone;
   if (!raw) return null;
   const digits = raw.replace(/\D/g, "");
   if (!digits) return null;
-  if (digits.startsWith("91") && digits.length === 12) return `https://wa.me/${digits}`;
-  if (digits.length === 10 && /^[6-9]/.test(digits)) return `https://wa.me/91${digits}`;
-  return `https://wa.me/${digits}`;
+  const number =
+    digits.startsWith("91") && digits.length === 12 ? digits
+    : digits.length === 10 && /^[6-9]/.test(digits) ? `91${digits}`
+    : digits;
+  const suffix = text ? `?text=${encodeURIComponent(text)}` : "";
+  return `https://wa.me/${number}${suffix}`;
+}
+
+// Placeholders a WhatsApp template's content may contain — resolved against
+// a lead's fields before the message is sent. Kept deliberately generic
+// (name/phone/city/category) since templates aren't limited to clinic leads.
+export function resolveTemplate(
+  content: string,
+  fields: { name?: string | null; phone?: string | null; city?: string | null; category?: string | null }
+): string {
+  return content
+    .replace(/\{\{\s*name\s*\}\}/gi, fields.name || "")
+    .replace(/\{\{\s*phone\s*\}\}/gi, fields.phone || "")
+    .replace(/\{\{\s*city\s*\}\}/gi, fields.city || "")
+    .replace(/\{\{\s*category\s*\}\}/gi, fields.category || "");
 }
 
 // Retry with exponential backoff

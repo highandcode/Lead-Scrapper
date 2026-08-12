@@ -40,6 +40,16 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   },
 };
 
+/** Admin-managed WhatsApp message template — placeholders are resolved
+ * against a Lead's fields before opening WhatsApp (see resolveTemplate). */
+export interface WhatsAppTemplate {
+  id: string;
+  name: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Profile {
   id: string;
   email: string;

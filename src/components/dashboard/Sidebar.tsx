@@ -16,6 +16,7 @@ import {
   ListFilter,
   Globe,
   Sparkles,
+  MessageSquareText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import UserMenu from "./UserMenu";
@@ -118,6 +119,7 @@ export default function Sidebar({ profile }: SidebarProps) {
             </p>
             {[
               { href: "/admin/users", icon: UserCog, label: "Manage Users" },
+              { href: "/admin/templates", icon: MessageSquareText, label: "WhatsApp Templates" },
             ].map((item) => {
               const active = pathname.startsWith(item.href);
               return (
